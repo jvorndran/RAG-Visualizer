@@ -1,0 +1,92 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rag-visualizer"
+version = "0.1.0"
+description = "A visual sandbox for experimenting with RAG configurations"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [
+    { name = "RAG Visualizer Team" }
+]
+keywords = ["rag", "visualization", "embeddings", "chunking", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "streamlit>=1.28",
+    "sentence-transformers>=2.2",
+    "faiss-cpu>=1.7",
+    "umap-learn>=0.5",
+    "plotly>=5.18",
+    "pypdf>=3.17",
+    "python-docx>=1.1",
+    "markdown>=3.5",
+    "docling>=1.0",
+    "llama-parse>=0.4",
+    "click>=8.1",
+    "streamlit-shadcn-ui>=0.8.0",
+    "langchain-text-splitters>=0.3",
+    "tiktoken>=0.5",
+]
+
+[project.optional-dependencies]
+llm = [
+    "openai>=1.0",
+    "anthropic>=0.18",
+]
+nlp = [
+    "nltk>=3.8",
+    "spacy>=3.7",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "ruff>=0.1",
+]
+all = [
+    "rag-visualizer[llm,nlp,dev]",
+]
+
+[project.scripts]
+rag-visualizer = "rag_visualizer.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/rag-visualizer/rag-visualizer"
+Documentation = "https://github.com/rag-visualizer/rag-visualizer#readme"
+Repository = "https://github.com/rag-visualizer/rag-visualizer"
+
+[tool.hatch.build.targets.wheel]
+packages = ["rag_visualizer"]
+
+[tool.black]
+line-length = 88
+target-version = ["py39", "py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I", "N", "UP", "ANN", "PT", "ARG", "PTH"]
+ignore = ["ANN101"] # Ignore 'self' type annotation for methods
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true

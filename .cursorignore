@@ -1,0 +1,9 @@
+.venv
+.git
+*.py.tmp.*
+*.json
+*.csv
+*.pdf
+.git/
+__pycache__/
+*.lock

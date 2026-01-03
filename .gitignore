@@ -1,0 +1,7 @@
+.venv
+.git
+**/__pycache__
+*.py.tmp.*
+.claude
+.cursor/
+.streamlit/secrets.toml
