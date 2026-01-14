@@ -41,7 +41,7 @@ def render_upload_step() -> None:
     # File uploader section
     with st.container(border=True):
         st.markdown("### Upload Document")
-        st.caption("Supported formats: PDF, TXT, MD, DOCX")
+        st.caption("Supported formats: PDF, DOCX, PPTX, XLSX, HTML, MD, TXT, PNG, JPG")
 
         limit_enabled = st.checkbox(
             "Limit parsed content",
@@ -78,7 +78,7 @@ def render_upload_step() -> None:
 
         uploaded_file = st.file_uploader(
             "Choose a file to upload",
-            type=["pdf", "txt", "md", "docx"],
+            type=["pdf", "docx", "pptx", "xlsx", "html", "htm", "md", "txt", "png", "jpg", "jpeg", "bmp", "tiff", "tif"],
             accept_multiple_files=False,
             label_visibility="collapsed"
         )

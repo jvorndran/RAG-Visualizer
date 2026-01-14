@@ -32,6 +32,22 @@ from docling.pipeline.standard_pdf_pipeline import (
 )
 from docling_core.types.doc import DocItemLabel, PictureItem
 
+# Mapping of file extensions to Docling InputFormat
+DOCLING_FORMAT_MAP = {
+    ".pdf": InputFormat.PDF,
+    ".docx": InputFormat.DOCX,
+    ".pptx": InputFormat.PPTX,
+    ".xlsx": InputFormat.XLSX,
+    ".html": InputFormat.HTML,
+    ".htm": InputFormat.HTML,
+    ".png": InputFormat.IMAGE,
+    ".jpg": InputFormat.IMAGE,
+    ".jpeg": InputFormat.IMAGE,
+    ".bmp": InputFormat.IMAGE,
+    ".tiff": InputFormat.IMAGE,
+    ".tif": InputFormat.IMAGE,
+}
+
 
 def get_available_devices() -> list[str]:
     """Get list of available compute devices for Docling.
@@ -135,6 +151,19 @@ def _get_docling_converter(
         allowed_formats=[InputFormat.PDF],
         format_options={InputFormat.PDF: format_option},
     )
+
+
+@st.cache_resource(show_spinner=False)
+def _get_generic_docling_converter(input_format: InputFormat) -> DocumentConverter:
+    """Create a cached docling converter for non-PDF formats.
+
+    Args:
+        input_format: The InputFormat to convert (DOCX, PPTX, XLSX, HTML, IMAGE)
+
+    Returns:
+        Configured DocumentConverter for the specified format
+    """
+    return DocumentConverter(allowed_formats=[input_format])
 
 
 @st.cache_resource(show_spinner=False)
@@ -351,6 +380,75 @@ def parse_pdf(
         ValueError: If PDF parsing fails
     """
     return parse_pdf_docling(content, params)
+
+
+def parse_with_docling(
+    content: bytes,
+    extension: str,
+    params: dict | None = None,
+) -> tuple[str, list[ExtractedImage]]:
+    """Parse document content using Docling for supported formats.
+
+    Supports PPTX, XLSX, HTML, and image formats.
+
+    Args:
+        content: File content as bytes
+        extension: File extension (e.g., ".pptx", ".xlsx")
+        params: Optional parsing configuration
+
+    Returns:
+        Tuple of (markdown_text, extracted_images)
+
+    Raises:
+        ValueError: If format is not supported or parsing fails
+    """
+    params = params or {}
+    extension = extension.lower()
+
+    if extension not in DOCLING_FORMAT_MAP:
+        raise ValueError(f"Unsupported format for Docling: {extension}")
+
+    input_format = DOCLING_FORMAT_MAP[extension]
+
+    # Build list of labels to filter from the list of label names
+    filter_label_names = params.get("docling_filter_labels", [])
+    filter_labels = []
+    for label_name in filter_label_names:
+        try:
+            filter_labels.append(DocItemLabel(label_name.lower()))
+        except ValueError:
+            pass
+
+    try:
+        import tempfile
+
+        # Docling requires a file path
+        with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        try:
+            converter = _get_generic_docling_converter(input_format)
+            result = converter.convert(tmp_path)
+            doc = result.document
+
+            # Extract text as markdown with filtering
+            text = _filter_docling_items(doc, filter_labels)
+
+            # Extract images if present
+            images: list[ExtractedImage] = []
+            if params.get("docling_extract_images", False):
+                images = _extract_images_from_docling(doc)
+
+            return text, images
+        finally:
+            try:
+                Path(tmp_path).unlink()
+            except Exception:
+                pass
+    except Exception as e:
+        format_name = extension.lstrip(".").upper()
+        raise ValueError(f"Failed to parse {format_name} with Docling: {str(e)}") from e
 
 
 def _extract_table_as_markdown(table: object) -> str:
@@ -643,6 +741,18 @@ def parse_document(
     elif extension == ".docx":
         parsed_text = parse_docx(content, params)
         file_format = "DOCX"
+    elif extension == ".pptx":
+        parsed_text, images = parse_with_docling(content, extension, params)
+        file_format = "PPTX"
+    elif extension == ".xlsx":
+        parsed_text, images = parse_with_docling(content, extension, params)
+        file_format = "XLSX"
+    elif extension in [".html", ".htm"]:
+        parsed_text, images = parse_with_docling(content, extension, params)
+        file_format = "HTML"
+    elif extension in [".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif"]:
+        parsed_text, images = parse_with_docling(content, extension, params)
+        file_format = "Image"
     elif extension in [".md", ".markdown"]:
         parsed_text = parse_markdown(content, params)
         file_format = "Markdown"
@@ -652,7 +762,7 @@ def parse_document(
     else:
         raise ValueError(
             f"Unsupported file format: {extension}. "
-            f"Supported formats: .pdf, .docx, .md, .txt"
+            f"Supported formats: .pdf, .docx, .pptx, .xlsx, .html, .md, .txt, .png, .jpg"
         )
 
     # Apply output format conversion
