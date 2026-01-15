@@ -17,12 +17,27 @@ from rag_visualizer.utils.parsers import parse_document
 from rag_visualizer.utils.visualization import create_embedding_plot, reduce_dimensions
 
 
-def _extract_header_metadata(metadata: dict) -> dict:
-    """Extract header metadata from chunk metadata."""
-    headers = {}
-    for key in ["Header 1", "Header 2", "Header 3"]:
+def _extract_section_hierarchy(metadata: dict) -> list[str]:
+    """Extract section hierarchy from chunk metadata.
+
+    Supports both Docling format (section_hierarchy) and legacy LangChain format.
+
+    Returns:
+        List of section headers from outermost to innermost.
+    """
+    if not metadata:
+        return []
+
+    # Docling format
+    if "section_hierarchy" in metadata:
+        return metadata["section_hierarchy"]
+
+    # Legacy LangChain format fallback
+    headers = []
+    for i in range(1, 4):
+        key = f"Header {i}"
         if key in metadata and metadata[key]:
-            headers[key] = metadata[key]
+            headers.append(metadata[key])
     return headers
 
 
@@ -298,13 +313,11 @@ def render_embeddings_step() -> None:
             for i, res in enumerate(neighbors):
                 with st.container(border=True):
                     st.markdown(f"**{i+1}. Score: {res.score:.4f}**")
-                    # Show header breadcrumb if available
-                    header_metadata = _extract_header_metadata(res.metadata) if res.metadata else {}
-                    if header_metadata:
-                        header_parts = [header_metadata[level] for level in ["Header 1", "Header 2", "Header 3"] if level in header_metadata]
-                        if header_parts:
-                            breadcrumb = " > ".join(header_parts)
-                            st.caption(f"{breadcrumb}")
+                    # Show section hierarchy breadcrumb if available
+                    section_hierarchy = _extract_section_hierarchy(res.metadata)
+                    if section_hierarchy:
+                        breadcrumb = " > ".join(section_hierarchy)
+                        st.caption(breadcrumb)
                     st.caption(res.text)
         else:
             st.info("Enter a query above to see the most similar chunks here.")

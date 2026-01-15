@@ -128,16 +128,16 @@ def render_rag_config_sidebar() -> None:
         st.write("")
         st.markdown("**Document Parsing & Text Splitting**")
 
-        # Output Format selector
-        output_formats = ["Markdown (Recommended)", "Original Format", "Plain Text"]
-        current_output_format = st.session_state.parsing_params.get("output_format", "markdown")
-
-        # Map display names to internal values
+        # Output Format selector - Docling native export formats
         format_display_map = {
             "Markdown (Recommended)": "markdown",
-            "Original Format": "original",
-            "Plain Text": "plain_text"
+            "HTML": "html",
+            "DocTags": "doctags",
+            "JSON (Lossless)": "json",
         }
+        output_formats = list(format_display_map.keys())
+        current_output_format = st.session_state.parsing_params.get("output_format", "markdown")
+
         format_value_map = {v: k for k, v in format_display_map.items()}
         current_format_display = format_value_map.get(current_output_format, "Markdown (Recommended)")
 

@@ -15,13 +15,110 @@ from rag_visualizer.services.storage import get_storage_dir, load_document
 from rag_visualizer.utils.parsers import parse_document
 
 
-def _extract_header_metadata(metadata: dict) -> dict:
-    """Extract header metadata from chunk metadata."""
-    headers = {}
-    for key in ["Header 1", "Header 2", "Header 3"]:
-        if key in metadata and metadata[key]:
-            headers[key] = metadata[key]
-    return headers
+def _extract_docling_metadata(metadata: dict) -> dict:
+    """Extract Docling-specific metadata from chunk metadata.
+
+    Returns a dict with:
+        - section_hierarchy: List of section headers
+        - element_type: Type of document element (paragraph, header, code, etc.)
+        - strategy: Chunking strategy used (Hierarchical or Hybrid)
+        - size: Character count
+        - page_number: Source page (if available)
+    """
+    result = {}
+
+    # Section hierarchy (Docling format)
+    if "section_hierarchy" in metadata:
+        result["section_hierarchy"] = metadata["section_hierarchy"]
+    # Legacy LangChain format fallback
+    elif any(f"Header {i}" in metadata for i in range(1, 4)):
+        headers = []
+        for i in range(1, 4):
+            key = f"Header {i}"
+            if key in metadata and metadata[key]:
+                headers.append(metadata[key])
+        if headers:
+            result["section_hierarchy"] = headers
+
+    # Element type
+    if "element_type" in metadata:
+        result["element_type"] = metadata["element_type"]
+
+    # Chunking strategy
+    if "strategy" in metadata:
+        result["strategy"] = metadata["strategy"]
+
+    # Size
+    if "size" in metadata:
+        result["size"] = metadata["size"]
+
+    # Page number (if available from Docling)
+    if "page_number" in metadata:
+        result["page_number"] = metadata["page_number"]
+    elif "page" in metadata:
+        result["page_number"] = metadata["page"]
+
+    return result
+
+
+def _contextualize_chunk(chunk_text: str, metadata: dict) -> str:
+    """Create contextualized text for embedding by prepending section context.
+
+    This mimics Docling's chunker.contextualize() method, which produces
+    metadata-enriched text suitable for embedding models.
+
+    Args:
+        chunk_text: The raw chunk text
+        metadata: Docling metadata extracted via _extract_docling_metadata
+
+    Returns:
+        Contextualized text with section headers prepended
+    """
+    context_parts = []
+
+    # Add section hierarchy as context
+    if "section_hierarchy" in metadata:
+        hierarchy = metadata["section_hierarchy"]
+        if hierarchy:
+            context_parts.append(" > ".join(hierarchy))
+
+    # Add element type indicator for non-paragraph content
+    element_type = metadata.get("element_type", "")
+    if element_type and element_type not in ("paragraph", "text", "merged"):
+        type_label = element_type.replace("_", " ").title()
+        context_parts.append(f"[{type_label}]")
+
+    if context_parts:
+        context_prefix = " | ".join(context_parts)
+        return f"{context_prefix}\n\n{chunk_text}"
+
+    return chunk_text
+
+
+def _format_element_type(element_type: str) -> tuple[str, str]:
+    """Format element type for display, returning (label, color).
+
+    Returns:
+        Tuple of (display_label, background_color)
+    """
+    type_styles = {
+        "paragraph": ("Para", "#e0e7ff"),
+        "text": ("Text", "#e0e7ff"),
+        "header_1": ("H1", "#fce7f3"),
+        "header_2": ("H2", "#fce7f3"),
+        "header_3": ("H3", "#fce7f3"),
+        "header_4": ("H4", "#fce7f3"),
+        "header_5": ("H5", "#fce7f3"),
+        "header_6": ("H6", "#fce7f3"),
+        "list_item": ("List", "#d1fae5"),
+        "code": ("Code", "#fef3c7"),
+        "table": ("Table", "#e0f2fe"),
+        "figure": ("Figure", "#f3e8ff"),
+        "merged": ("Merged", "#f1f5f9"),
+    }
+    if element_type in type_styles:
+        return type_styles[element_type]
+    return (element_type.replace("_", " ").title(), "#f1f5f9")
 
 
 def _get_parsed_text_key(doc_name: str, parsing_params: dict) -> str:
@@ -257,12 +354,14 @@ def render_chunks_step() -> None:
                 chunks_with_overlap += 1
                 total_overlap_len += overlap_len
         
+        docling_meta = _extract_docling_metadata(chunk.metadata)
         chunk_display_data.append({
             "chunk": chunk,
             "overlap_text": overlap_text,
             "main_text": main_text,
             "len": len(chunk.text),
-            "header_metadata": _extract_header_metadata(chunk.metadata),
+            "docling_metadata": docling_meta,
+            "contextualized_text": _contextualize_chunk(chunk.text, docling_meta),
         })
 
     avg_overlap_size = (
@@ -333,26 +432,48 @@ def render_chunks_step() -> None:
             f'margin: 0; position: relative;" title="Chunk {i+1}">'
         )
         
-        # Char count badge (floating right)
+        meta = data["docling_metadata"]
+
+        # Metadata badges row (floating right)
         chunks_html_parts.append(
-            f'<span style="float: right; background: rgba(0,0,0,0.1); '
-            f'color: #555; font-size: 0.7rem; padding: 1px 6px; '
-            f'border-radius: 10px; margin-left: 8px; user-select: none;">'
-            f'{data["len"]}</span>'
+            '<span style="float: right; display: flex; gap: 4px; align-items: center;">'
         )
 
-        # Header breadcrumb (when available)
-        if data["header_metadata"]:
-            header_parts = []
-            for level in ["Header 1", "Header 2", "Header 3"]:
-                if level in data["header_metadata"]:
-                    header_parts.append(html.escape(data["header_metadata"][level]))
-            if header_parts:
-                breadcrumb = " > ".join(header_parts)
-                chunks_html_parts.append(
-                    f'<div style="font-size: 0.8rem; color: #6b7280; '
-                    f'margin-bottom: 4px; font-weight: 500;">{breadcrumb}</div>'
-                )
+        # Page number badge (if available)
+        if "page_number" in meta:
+            chunks_html_parts.append(
+                f'<span style="background: #dbeafe; color: #1e40af; '
+                f'font-size: 0.65rem; padding: 1px 5px; border-radius: 8px; '
+                f'user-select: none;">p.{meta["page_number"]}</span>'
+            )
+
+        # Element type badge
+        if "element_type" in meta:
+            type_label, type_color = _format_element_type(meta["element_type"])
+            chunks_html_parts.append(
+                f'<span style="background: {type_color}; color: #374151; '
+                f'font-size: 0.65rem; padding: 1px 5px; border-radius: 8px; '
+                f'user-select: none;">{type_label}</span>'
+            )
+
+        # Char count badge
+        chunks_html_parts.append(
+            f'<span style="background: rgba(0,0,0,0.1); '
+            f'color: #555; font-size: 0.65rem; padding: 1px 5px; '
+            f'border-radius: 8px; user-select: none;">'
+            f'{data["len"]} chars</span>'
+        )
+
+        chunks_html_parts.append('</span>')
+
+        # Section hierarchy breadcrumb (when available)
+        if "section_hierarchy" in meta and meta["section_hierarchy"]:
+            hierarchy = meta["section_hierarchy"]
+            breadcrumb = " > ".join(html.escape(h) for h in hierarchy)
+            chunks_html_parts.append(
+                f'<div style="font-size: 0.75rem; color: #6b7280; '
+                f'margin-bottom: 4px; font-weight: 500;">{breadcrumb}</div>'
+            )
 
         # Render overlap text inline with dashed box style
         if data["overlap_text"]:
@@ -384,3 +505,61 @@ def render_chunks_step() -> None:
     st.write("")
     with st.container(border=True):
         st.markdown(chunks_html, unsafe_allow_html=True)
+
+    # Contextualize Preview Section
+    if chunks and chunk_display_data:
+        st.write("")
+        st.markdown("### Contextualized Preview")
+        st.caption(
+            "Preview how chunks will appear when enriched with metadata context "
+            "for embedding. This shows the output of contextualization."
+        )
+
+        # Chunk selector for contextualized preview
+        chunk_options = [f"Chunk {i+1}" for i in range(len(chunk_display_data))]
+        selected_chunk_idx = st.selectbox(
+            "Select chunk to preview",
+            range(len(chunk_options)),
+            format_func=lambda x: chunk_options[x],
+            key="contextualize_preview_selector",
+        )
+
+        if selected_chunk_idx is not None:
+            selected_data = chunk_display_data[selected_chunk_idx]
+            meta = selected_data["docling_metadata"]
+
+            # Display chunk metadata summary
+            meta_cols = st.columns(4)
+            with meta_cols[0]:
+                element_type = meta.get("element_type", "unknown")
+                type_label, _ = _format_element_type(element_type)
+                st.metric("Element Type", type_label)
+            with meta_cols[1]:
+                st.metric("Characters", selected_data["len"])
+            with meta_cols[2]:
+                strategy = meta.get("strategy", "-")
+                st.metric("Strategy", strategy)
+            with meta_cols[3]:
+                page = meta.get("page_number", "-")
+                st.metric("Page", page)
+
+            # Show section hierarchy if available
+            if "section_hierarchy" in meta and meta["section_hierarchy"]:
+                st.markdown("**Section Path:**")
+                hierarchy_display = " → ".join(meta["section_hierarchy"])
+                st.code(hierarchy_display, language=None)
+
+            # Show original vs contextualized comparison
+            tab_original, tab_contextualized = st.tabs(
+                ["Original Text", "Contextualized (for Embedding)"]
+            )
+
+            with tab_original:
+                st.code(selected_data["chunk"].text, language=None)
+
+            with tab_contextualized:
+                st.code(selected_data["contextualized_text"], language=None)
+                st.caption(
+                    "This is the text that would be sent to the embedding model, "
+                    "enriched with section context for better semantic retrieval."
+                )

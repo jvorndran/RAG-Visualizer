@@ -283,17 +283,53 @@ def _filter_docling_items(doc: object, filter_labels: list[DocItemLabel]) -> str
     return "\n\n".join(markdown_parts) if markdown_parts else doc.export_to_markdown()
 
 
+def export_document(doc: object, output_format: str, filter_labels: list | None = None) -> str:
+    """Export a Docling document to the specified format.
+
+    Args:
+        doc: Docling document object
+        output_format: Target format (markdown, html, doctags, json)
+        filter_labels: Optional list of DocItemLabel types to filter out (markdown only)
+
+    Returns:
+        Exported document text in the specified format
+    """
+    if output_format == "markdown":
+        # Use filtering for markdown export
+        if filter_labels:
+            return _filter_docling_items(doc, filter_labels)
+        return doc.export_to_markdown()
+    elif output_format == "html":
+        return doc.export_to_html()
+    elif output_format == "doctags":
+        return doc.export_to_document_tokens()
+    elif output_format == "json":
+        return doc.model_dump_json()
+    else:
+        # Default to markdown
+        if filter_labels:
+            return _filter_docling_items(doc, filter_labels)
+        return doc.export_to_markdown()
+
+
 def parse_pdf_docling(
     content: bytes, params: dict | None = None
 ) -> tuple[str, list[ExtractedImage]]:
-    """Parse PDF content using docling engine.
+    """Parse PDF content using Docling engine.
 
     Args:
         content: PDF file content as bytes
-        params: Optional parsing configuration
+        params: Optional parsing configuration including:
+            - output_format: Export format (markdown, html, doctags, json)
+            - docling_enable_ocr: Enable OCR for scanned PDFs
+            - docling_table_structure: Extract table structure
+            - docling_threads: Number of worker threads
+            - docling_device: Compute device (auto, cpu, cuda, mps)
+            - docling_filter_labels: Labels to filter out (markdown only)
+            - docling_extract_images: Extract images from PDF
 
     Returns:
-        Tuple of (markdown_text, extracted_images)
+        Tuple of (exported_text, extracted_images)
 
     Raises:
         ValueError: If PDF parsing fails
@@ -307,7 +343,10 @@ def parse_pdf_docling(
     extract_images = bool(params.get("docling_extract_images", False))
     device = params.get("docling_device", "auto")
     
-    # Build list of labels to filter from the list of label names
+    # Get output format (markdown, html, doctags, json)
+    output_format = params.get("output_format", "markdown")
+
+    # Build list of labels to filter from the list of label names (markdown only)
     filter_label_names = params.get("docling_filter_labels", [])
     filter_labels = []
     for label_name in filter_label_names:
@@ -345,8 +384,8 @@ def parse_pdf_docling(
             result = converter.convert(tmp_path)
             doc = result.document
 
-            # Extract text as markdown with filtering
-            text = _filter_docling_items(doc, filter_labels)
+            # Export document in the specified format
+            text = export_document(doc, output_format, filter_labels)
 
             # Extract images if enabled
             images: list[ExtractedImage] = []
@@ -394,10 +433,13 @@ def parse_with_docling(
     Args:
         content: File content as bytes
         extension: File extension (e.g., ".pptx", ".xlsx")
-        params: Optional parsing configuration
+        params: Optional parsing configuration including:
+            - output_format: Export format (markdown, html, doctags, json)
+            - docling_filter_labels: Labels to filter out (markdown only)
+            - docling_extract_images: Extract images from document
 
     Returns:
-        Tuple of (markdown_text, extracted_images)
+        Tuple of (exported_text, extracted_images)
 
     Raises:
         ValueError: If format is not supported or parsing fails
@@ -410,7 +452,10 @@ def parse_with_docling(
 
     input_format = DOCLING_FORMAT_MAP[extension]
 
-    # Build list of labels to filter from the list of label names
+    # Get output format (markdown, html, doctags, json)
+    output_format = params.get("output_format", "markdown")
+
+    # Build list of labels to filter from the list of label names (markdown only)
     filter_label_names = params.get("docling_filter_labels", [])
     filter_labels = []
     for label_name in filter_label_names:
@@ -432,8 +477,8 @@ def parse_with_docling(
             result = converter.convert(tmp_path)
             doc = result.document
 
-            # Extract text as markdown with filtering
-            text = _filter_docling_items(doc, filter_labels)
+            # Export document in the specified format
+            text = export_document(doc, output_format, filter_labels)
 
             # Extract images if present
             images: list[ExtractedImage] = []
@@ -665,21 +710,28 @@ def _convert_to_format(
 ) -> str:
     """Convert text between different formats.
 
+    For Docling-parsed documents (PDF, PPTX, XLSX, HTML, Image), the output
+    format is already applied during parsing via export_document().
+
+    For non-Docling parsers (DOCX, Markdown, Text), this function handles
+    format conversion where possible.
+
     Args:
         text: Input text
-        source_format: Source format (PDF, DOCX, Markdown, Text) - unused
-        target_format: Target format (markdown, original, plain_text)
+        source_format: Source format (PDF, DOCX, Markdown, Text, etc.)
+        target_format: Target format (markdown, html, doctags, json)
 
     Returns:
         Converted text
     """
-    if target_format == "original":
+    # New Docling formats - text is already in the correct format from parsing
+    if target_format in ("markdown", "html", "doctags", "json"):
+        return text
+    # Legacy formats for backwards compatibility
+    elif target_format == "original":
         return text
     elif target_format == "plain_text":
         return _markdown_to_plain_text(text)
-    elif target_format == "markdown":
-        # Text is already in markdown or will be converted by format-specific parsers
-        return text
     else:
         return text
 
@@ -765,8 +817,8 @@ def parse_document(
             f"Supported formats: .pdf, .docx, .pptx, .xlsx, .html, .md, .txt, .png, .jpg"
         )
 
-    # Apply output format conversion
-    output_format = params.get("output_format", "original")
+    # Apply output format conversion (for non-Docling parsers)
+    output_format = params.get("output_format", "markdown")
     parsed_text = _convert_to_format(parsed_text, file_format, output_format)
 
     # Apply post-processing
