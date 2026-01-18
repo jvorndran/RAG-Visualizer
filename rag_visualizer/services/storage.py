@@ -13,6 +13,8 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+import streamlit as st
+
 # Default storage location
 DEFAULT_STORAGE_DIR = Path.home() / ".rag-visualizer"
 
@@ -186,8 +188,11 @@ def delete_document(filename: str) -> bool:
     return False
 
 
+@st.cache_data(ttl=2)
 def list_documents() -> list[str]:
     """List all stored documents.
+
+    Cached for 2 seconds to avoid repeated filesystem scans during reruns.
 
     Returns:
         List of document filenames

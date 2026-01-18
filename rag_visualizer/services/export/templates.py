@@ -153,6 +153,390 @@ def parse_text(file_path: str) -> str:
 # CHUNKING TEMPLATES
 # =============================================================================
 
+CHUNKING_HIERARCHICAL = '''"""Text Chunking with Hierarchical Strategy
+
+Structure-aware chunking that creates one chunk per document element (paragraph,
+header, list, code block). Best for preserving document structure.
+
+Configuration:
+- Include Headers: {include_headers}
+- Merge Small Chunks: {merge_small_chunks}
+- Min Chunk Size: {min_chunk_size} characters
+"""
+
+import re
+from dataclasses import dataclass
+from typing import Any
+
+
+@dataclass
+class Chunk:
+    """A chunk of text with position tracking."""
+    text: str
+    start_index: int
+    end_index: int
+    metadata: dict[str, Any]
+
+
+def _split_into_elements(text: str) -> list[dict[str, Any]]:
+    """Split text into structural elements."""
+    elements = []
+    current_pos = 0
+
+    header_pattern = r"^(#{{1,6}})\\s+(.+)$"
+    list_pattern = r"^(\\s*[-*+]|\\s*\\d+\\.)\\s+(.+)$"
+
+    lines = text.split("\\n")
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
+        line_start = text.find(line, current_pos)
+        if line_start == -1:
+            line_start = current_pos
+
+        # Check for code block
+        if line.strip().startswith("```"):
+            code_content = [line]
+            j = i + 1
+            while j < len(lines) and not lines[j].strip().startswith("```"):
+                code_content.append(lines[j])
+                j += 1
+            if j < len(lines):
+                code_content.append(lines[j])
+            code_text = "\\n".join(code_content)
+            code_end = line_start + len(code_text)
+            elements.append({{"type": "code", "text": code_text, "start": line_start, "end": code_end}})
+            current_pos = code_end + 1
+            i = j + 1
+            continue
+
+        # Check for header
+        header_match = re.match(header_pattern, line)
+        if header_match:
+            level = len(header_match.group(1))
+            elements.append({{"type": f"header_{{level}}", "text": line, "start": line_start, "end": line_start + len(line)}})
+            current_pos = line_start + len(line) + 1
+            i += 1
+            continue
+
+        # Check for list item
+        if re.match(list_pattern, line):
+            elements.append({{"type": "list_item", "text": line, "start": line_start, "end": line_start + len(line)}})
+            current_pos = line_start + len(line) + 1
+            i += 1
+            continue
+
+        # Empty line
+        if not line.strip():
+            current_pos = line_start + len(line) + 1
+            i += 1
+            continue
+
+        # Paragraph
+        para_lines = [line]
+        j = i + 1
+        while j < len(lines) and lines[j].strip() and not re.match(header_pattern, lines[j]) and not lines[j].strip().startswith("```"):
+            if re.match(list_pattern, lines[j]):
+                break
+            para_lines.append(lines[j])
+            j += 1
+        para_text = "\\n".join(para_lines)
+        para_end = line_start + len(para_text)
+        elements.append({{"type": "paragraph", "text": para_text, "start": line_start, "end": para_end}})
+        current_pos = para_end + 1
+        i = j
+
+    return elements
+
+
+def chunk_text(text: str) -> list[Chunk]:
+    """Split text into hierarchical chunks.
+
+    Args:
+        text: Source text to split
+
+    Returns:
+        List of Chunk objects
+    """
+    include_headers = {include_headers}
+    merge_small = {merge_small_chunks}
+    min_size = {min_chunk_size}
+
+    elements = _split_into_elements(text)
+    if not elements:
+        return [Chunk(text=text, start_index=0, end_index=len(text),
+                      metadata={{"strategy": "Hierarchical", "element_type": "text", "chunk_index": 0}})]
+
+    chunks = []
+    current_headers: list[str] = []
+    pending_chunk: dict[str, Any] | None = None
+
+    for elem in elements:
+        if elem["type"].startswith("header_"):
+            level = int(elem["type"].split("_")[1])
+            current_headers = current_headers[:level - 1]
+            current_headers.append(elem["text"].lstrip("#").strip())
+
+        metadata = {{"strategy": "Hierarchical", "element_type": elem["type"], "size": len(elem["text"])}}
+        if include_headers and current_headers:
+            metadata["section_hierarchy"] = current_headers.copy()
+
+        chunk_data = {{"text": elem["text"], "start_index": elem["start"], "end_index": elem["end"], "metadata": metadata}}
+
+        if merge_small and len(elem["text"]) < min_size:
+            if pending_chunk is None:
+                pending_chunk = chunk_data
+            else:
+                pending_chunk["text"] += "\\n\\n" + chunk_data["text"]
+                pending_chunk["end_index"] = chunk_data["end_index"]
+                pending_chunk["metadata"]["size"] = len(pending_chunk["text"])
+                pending_chunk["metadata"]["element_type"] = "merged"
+        else:
+            if pending_chunk is not None:
+                if len(pending_chunk["text"]) >= min_size:
+                    pending_chunk["metadata"]["chunk_index"] = len(chunks)
+                    chunks.append(Chunk(**pending_chunk))
+                else:
+                    chunk_data["text"] = pending_chunk["text"] + "\\n\\n" + chunk_data["text"]
+                    chunk_data["start_index"] = pending_chunk["start_index"]
+                    chunk_data["metadata"]["size"] = len(chunk_data["text"])
+                    chunk_data["metadata"]["element_type"] = "merged"
+                pending_chunk = None
+            chunk_data["metadata"]["chunk_index"] = len(chunks)
+            chunks.append(Chunk(**chunk_data))
+
+    if pending_chunk is not None:
+        pending_chunk["metadata"]["chunk_index"] = len(chunks)
+        chunks.append(Chunk(**pending_chunk))
+
+    return chunks
+
+
+# Example usage:
+# chunks = chunk_text(text)
+# print(f"Created {{len(chunks)}} chunks")
+# for chunk in chunks[:3]:
+#     print(f"[{{chunk.metadata['element_type']}}] {{chunk.text[:100]}}...")
+'''
+
+CHUNKING_HYBRID = '''"""Text Chunking with Hybrid Strategy
+
+Token-aware chunking that respects document structure while maintaining token limits.
+Best for embedding models with fixed context windows.
+
+Configuration:
+- Max Tokens: {max_tokens}
+- Chunk Overlap: {chunk_overlap} tokens
+- Tokenizer: {tokenizer}
+"""
+
+import re
+from dataclasses import dataclass
+from typing import Any
+
+try:
+    import tiktoken
+    HAS_TIKTOKEN = True
+except ImportError:
+    HAS_TIKTOKEN = False
+
+
+@dataclass
+class Chunk:
+    """A chunk of text with position tracking."""
+    text: str
+    start_index: int
+    end_index: int
+    metadata: dict[str, Any]
+
+
+def _count_tokens(text: str, tokenizer: str = "{tokenizer}") -> int:
+    """Count tokens in text."""
+    if HAS_TIKTOKEN:
+        try:
+            enc = tiktoken.get_encoding(tokenizer)
+            return len(enc.encode(text))
+        except Exception:
+            pass
+    return len(text) // 4  # Fallback estimate
+
+
+def _split_into_elements(text: str) -> list[dict[str, Any]]:
+    """Split text into structural elements."""
+    elements = []
+    current_pos = 0
+    header_pattern = r"^(#{{1,6}})\\s+(.+)$"
+    list_pattern = r"^(\\s*[-*+]|\\s*\\d+\\.)\\s+(.+)$"
+
+    lines = text.split("\\n")
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
+        line_start = text.find(line, current_pos)
+        if line_start == -1:
+            line_start = current_pos
+
+        if line.strip().startswith("```"):
+            code_content = [line]
+            j = i + 1
+            while j < len(lines) and not lines[j].strip().startswith("```"):
+                code_content.append(lines[j])
+                j += 1
+            if j < len(lines):
+                code_content.append(lines[j])
+            code_text = "\\n".join(code_content)
+            code_end = line_start + len(code_text)
+            elements.append({{"type": "code", "text": code_text, "start": line_start, "end": code_end}})
+            current_pos = code_end + 1
+            i = j + 1
+            continue
+
+        header_match = re.match(header_pattern, line)
+        if header_match:
+            level = len(header_match.group(1))
+            elements.append({{"type": f"header_{{level}}", "text": line, "start": line_start, "end": line_start + len(line)}})
+            current_pos = line_start + len(line) + 1
+            i += 1
+            continue
+
+        if re.match(list_pattern, line):
+            elements.append({{"type": "list_item", "text": line, "start": line_start, "end": line_start + len(line)}})
+            current_pos = line_start + len(line) + 1
+            i += 1
+            continue
+
+        if not line.strip():
+            current_pos = line_start + len(line) + 1
+            i += 1
+            continue
+
+        para_lines = [line]
+        j = i + 1
+        while j < len(lines) and lines[j].strip() and not re.match(header_pattern, lines[j]) and not lines[j].strip().startswith("```"):
+            if re.match(list_pattern, lines[j]):
+                break
+            para_lines.append(lines[j])
+            j += 1
+        para_text = "\\n".join(para_lines)
+        para_end = line_start + len(para_text)
+        elements.append({{"type": "paragraph", "text": para_text, "start": line_start, "end": para_end}})
+        current_pos = para_end + 1
+        i = j
+
+    return elements
+
+
+def _get_overlap_text(text: str, overlap_tokens: int, tokenizer: str) -> str:
+    """Get the last N tokens worth of text for overlap."""
+    words = text.split()
+    overlap_words: list[str] = []
+    for word in reversed(words):
+        test = " ".join([word] + overlap_words)
+        if _count_tokens(test, tokenizer) > overlap_tokens:
+            break
+        overlap_words.insert(0, word)
+    return " ".join(overlap_words)
+
+
+def chunk_text(text: str) -> list[Chunk]:
+    """Split text into token-aware chunks.
+
+    Args:
+        text: Source text to split
+
+    Returns:
+        List of Chunk objects
+    """
+    max_tokens = {max_tokens}
+    overlap = {chunk_overlap}
+    tokenizer = "{tokenizer}"
+
+    elements = _split_into_elements(text)
+    if not elements:
+        return [Chunk(text=text, start_index=0, end_index=len(text),
+                      metadata={{"strategy": "Hybrid", "chunk_index": 0, "size": len(text)}})]
+
+    chunks = []
+    current_text = ""
+    current_start = 0
+    current_headers: list[str] = []
+
+    def make_chunk(txt: str, start: int, idx: int, headers: list[str]) -> Chunk:
+        metadata = {{"strategy": "Hybrid", "chunk_index": idx, "size": len(txt)}}
+        if headers:
+            metadata["section_hierarchy"] = headers
+        return Chunk(text=txt, start_index=start, end_index=start + len(txt), metadata=metadata)
+
+    for elem in elements:
+        if elem["type"].startswith("header_"):
+            level = int(elem["type"].split("_")[1])
+            current_headers = current_headers[:level - 1]
+            current_headers.append(elem["text"].lstrip("#").strip())
+
+        elem_text = elem["text"]
+        elem_tokens = _count_tokens(elem_text, tokenizer)
+
+        if elem_tokens > max_tokens:
+            if current_text.strip():
+                chunks.append(make_chunk(current_text, current_start, len(chunks), current_headers.copy()))
+            # Split large element by words
+            words = elem_text.split()
+            chunk_words: list[str] = []
+            chunk_start = elem["start"]
+            for word in words:
+                test_text = " ".join(chunk_words + [word])
+                if _count_tokens(test_text, tokenizer) > max_tokens and chunk_words:
+                    chunk_text_str = " ".join(chunk_words)
+                    chunks.append(make_chunk(chunk_text_str, chunk_start, len(chunks), current_headers.copy()))
+                    if overlap > 0:
+                        overlap_words = []
+                        for w in reversed(chunk_words):
+                            test = " ".join([w] + overlap_words)
+                            if _count_tokens(test, tokenizer) > overlap:
+                                break
+                            overlap_words.insert(0, w)
+                        chunk_words = overlap_words + [word]
+                    else:
+                        chunk_words = [word]
+                    chunk_start = elem["start"] + elem_text.find(" ".join(chunk_words))
+                else:
+                    chunk_words.append(word)
+            if chunk_words:
+                chunk_text_str = " ".join(chunk_words)
+                chunks.append(make_chunk(chunk_text_str, chunk_start, len(chunks), current_headers.copy()))
+            current_text = ""
+            current_start = elem["end"] + 1
+            continue
+
+        combined = current_text + ("\\n\\n" if current_text else "") + elem_text
+        if _count_tokens(combined, tokenizer) > max_tokens and current_text.strip():
+            chunks.append(make_chunk(current_text, current_start, len(chunks), current_headers.copy()))
+            if overlap > 0:
+                overlap_text = _get_overlap_text(current_text, overlap, tokenizer)
+                current_text = overlap_text + "\\n\\n" + elem_text if overlap_text else elem_text
+            else:
+                current_text = elem_text
+            current_start = elem["start"]
+        else:
+            if not current_text:
+                current_start = elem["start"]
+            current_text = combined
+
+    if current_text.strip():
+        chunks.append(make_chunk(current_text, current_start, len(chunks), current_headers.copy()))
+
+    return chunks
+
+
+# Example usage:
+# chunks = chunk_text(text)
+# print(f"Created {{len(chunks)}} chunks")
+# for chunk in chunks[:3]:
+#     print(f"[{{_count_tokens(chunk.text)}} tokens] {{chunk.text[:100]}}...")
+'''
+
 CHUNKING_RECURSIVE = '''"""Text Chunking with RecursiveCharacterTextSplitter
 
 Best for most documents. Splits by paragraphs, then sentences, then words
@@ -673,6 +1057,10 @@ PARSING_TEMPLATES = {
 }
 
 CHUNKING_TEMPLATES = {
+    # Docling chunkers (primary)
+    "HierarchicalChunker": CHUNKING_HIERARCHICAL,
+    "HybridChunker": CHUNKING_HYBRID,
+    # Legacy LangChain splitters (for backwards compatibility in exports)
     "RecursiveCharacterTextSplitter": CHUNKING_RECURSIVE,
     "CharacterTextSplitter": CHUNKING_CHARACTER,
     "TokenTextSplitter": CHUNKING_TOKEN,

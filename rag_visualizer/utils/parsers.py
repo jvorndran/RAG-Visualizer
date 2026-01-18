@@ -49,62 +49,6 @@ DOCLING_FORMAT_MAP = {
 }
 
 
-def get_available_devices() -> list[str]:
-    """Get list of available compute devices for Docling.
-
-    Returns:
-        List of device names (e.g., ["auto", "cpu", "cuda"])
-    """
-    devices = ["auto", "cpu"]
-
-    try:
-        import torch
-        if torch.cuda.is_available():
-            devices.append("cuda")
-            # Add specific CUDA devices if multiple GPUs
-            for i in range(torch.cuda.device_count()):
-                devices.append(f"cuda:{i}")
-        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            devices.append("mps")
-    except ImportError:
-        pass
-
-    return devices
-
-
-def get_device_info() -> dict:
-    """Get information about available compute devices.
-
-    Returns:
-        Dict with device availability info
-    """
-    info = {
-        "cuda_available": False,
-        "mps_available": False,
-        "gpu_name": None,
-        "torch_installed": False,
-        "cuda_version": None,
-    }
-
-    try:
-        import torch
-        info["torch_installed"] = True
-        info["torch_version"] = torch.__version__
-
-        if torch.cuda.is_available():
-            info["cuda_available"] = True
-            info["gpu_name"] = torch.cuda.get_device_name(0)
-            info["cuda_version"] = torch.version.cuda
-        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            info["mps_available"] = True
-            if not info["gpu_name"]:
-                info["gpu_name"] = "Apple Metal"
-    except ImportError:
-        pass
-
-    return info
-
-
 @dataclass
 class ExtractedImage:
     """An image extracted from a document."""

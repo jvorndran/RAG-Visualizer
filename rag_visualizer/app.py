@@ -130,23 +130,35 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Render Step Navigation
-render_step_nav(active_step=st.session_state.current_step)
 
-# Dispatcher for steps
-if st.session_state.current_step == "upload":
-    render_upload_step()
-elif st.session_state.current_step == "chunks":
-    render_chunks_step()
-elif st.session_state.current_step == "embeddings":
-    render_embeddings_step()
-elif st.session_state.current_step == "query":
-    render_query_step()
-elif st.session_state.current_step == "export":
-    render_export_step()
-else:
-    # Home card if no valid step
-    with ui.card(key="home_card"):
-        st.markdown("### Welcome to RAG Playground")
-        st.markdown("This interactive tool allows you to visualize and experiment with different stages of a Retrieval-Augmented Generation pipeline.")
-        st.markdown("Choose a step above to get started or navigate to the **Upload** section to add your own documents.")
+@st.fragment
+def render_main_content():
+    """Render step navigation and content as a fragment.
+
+    Using a fragment isolates reruns to this section only,
+    preventing the sidebar from re-rendering on tab switches.
+    """
+    # Render Step Navigation
+    render_step_nav(active_step=st.session_state.current_step)
+
+    # Dispatcher for steps
+    if st.session_state.current_step == "upload":
+        render_upload_step()
+    elif st.session_state.current_step == "chunks":
+        render_chunks_step()
+    elif st.session_state.current_step == "embeddings":
+        render_embeddings_step()
+    elif st.session_state.current_step == "query":
+        render_query_step()
+    elif st.session_state.current_step == "export":
+        render_export_step()
+    else:
+        # Home card if no valid step
+        with ui.card(key="home_card"):
+            st.markdown("### Welcome to RAG Playground")
+            st.markdown("This interactive tool allows you to visualize and experiment with different stages of a Retrieval-Augmented Generation pipeline.")
+            st.markdown("Choose a step above to get started or navigate to the **Upload** section to add your own documents.")
+
+
+# Render main content as a fragment (tab switches only re-run this section)
+render_main_content()

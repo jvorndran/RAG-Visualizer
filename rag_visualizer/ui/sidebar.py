@@ -27,7 +27,6 @@ from rag_visualizer.services.storage import (
 
 def render_rag_config_sidebar() -> None:
     """Render RAG configuration in the sidebar."""
-    st.markdown("### 📄 RAG Configuration")
 
     # Initialize session state if not present
     docs = list_documents()
@@ -112,18 +111,16 @@ def render_rag_config_sidebar() -> None:
     else:
         st.info("No documents available. Upload a file in the Upload step.")
         st.session_state.doc_name = None
+        return  # Exit early before the form to avoid missing submit button error
 
     with st.form("rag_config_form"):
         st.write("")
         st.markdown("**Document**")
-        if all_docs:
-            form_doc_name = st.selectbox(
-                "Document",
-                options=all_docs,
-                key="sidebar_doc_selector"
-            )
-        else:
-            st.stop()
+        form_doc_name = st.selectbox(
+            "Document",
+            options=all_docs,
+            key="sidebar_doc_selector"
+        )
 
         st.write("")
         st.markdown("**Document Parsing & Text Splitting**")
@@ -173,11 +170,6 @@ def render_rag_config_sidebar() -> None:
 
         # Advanced parsing options (Docling)
         with st.expander("Advanced Parsing Options", expanded=False):
-            from rag_visualizer.utils.parsers import (
-                get_available_devices,
-                get_device_info,
-            )
-
             # Global character cap (affects all steps)
             max_characters = st.number_input(
                 "Max characters to parse",
@@ -190,50 +182,6 @@ def render_rag_config_sidebar() -> None:
             )
 
             max_threads = max(1, min((os.cpu_count() or 4), 16))
-
-            # Device selector for GPU acceleration
-            available_devices = get_available_devices()
-            device_info = get_device_info()
-            current_device = st.session_state.parsing_params.get("docling_device", "auto")
-            if current_device not in available_devices:
-                current_device = "auto"
-
-            docling_device = st.selectbox(
-                "Compute Device",
-                options=available_devices,
-                index=available_devices.index(current_device),
-                key="sidebar_docling_device",
-                help="Use GPU for faster processing. 'auto' will try to detect GPU automatically.",
-            )
-
-            # Show device status and guidance
-            if docling_device == "cpu":
-                st.caption("Using CPU only (slower)")
-            elif docling_device == "auto":
-                if device_info["cuda_available"]:
-                    st.caption(f"Auto-detected: {device_info['gpu_name']} (CUDA {device_info['cuda_version']})")
-                elif device_info["mps_available"]:
-                    st.caption("Auto-detected: Apple Metal GPU")
-                else:
-                    st.caption("No GPU detected, will use CPU")
-            elif docling_device.startswith("cuda"):
-                if device_info["cuda_available"]:
-                    st.caption(f"Using: {device_info['gpu_name']} (CUDA {device_info['cuda_version']})")
-                elif not device_info["torch_installed"]:
-                    st.warning("PyTorch not installed. Install with CUDA support:")
-                    st.code("pip install torch --index-url https://download.pytorch.org/whl/cu121", language="bash")
-                else:
-                    st.warning("CUDA not available. Ensure you have:")
-                    st.markdown("""
-- NVIDIA GPU with CUDA support
-- NVIDIA drivers installed
-- PyTorch with CUDA: `pip install torch --index-url https://download.pytorch.org/whl/cu121`
-""")
-            elif docling_device == "mps":
-                if device_info["mps_available"]:
-                    st.caption("Using: Apple Metal GPU")
-                else:
-                    st.warning("Apple Metal not available. Requires macOS with Apple Silicon.")
 
             docling_enable_ocr = st.checkbox(
                 "Enable OCR (slower, use for scanned PDFs)",
@@ -361,7 +309,7 @@ def render_rag_config_sidebar() -> None:
             "output_format": format_display_map.get(output_format, "markdown"),
             "normalize_whitespace": normalize_whitespace,
             "remove_special_chars": remove_special_chars,
-            "docling_device": docling_device,
+            "docling_device": "auto",  # Always use auto device detection
             "docling_enable_ocr": docling_enable_ocr,
             "docling_table_structure": docling_table_structure,
             "docling_threads": docling_threads,

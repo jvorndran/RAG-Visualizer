@@ -38,6 +38,10 @@ PARSER_DEPENDENCIES = {
 }
 
 SPLITTER_DEPENDENCIES = {
+    # Docling chunkers (primary)
+    "HierarchicalChunker": [],  # No external dependencies
+    "HybridChunker": ["tiktoken"],  # Optional but recommended
+    # Legacy LangChain splitters (for backwards compatibility)
     "RecursiveCharacterTextSplitter": ["langchain-text-splitters"],
     "CharacterTextSplitter": ["langchain-text-splitters"],
     "TokenTextSplitter": ["langchain-text-splitters", "tiktoken"],
@@ -124,7 +128,7 @@ def generate_parsing_code(config: ExportConfig) -> str:
 def generate_chunking_code(config: ExportConfig) -> str:
     """Generate text chunking code based on configuration."""
     params = config.chunking_params
-    splitter = params.get("splitter", "RecursiveCharacterTextSplitter")
+    splitter = params.get("splitter", "HybridChunker")
 
     template = CHUNKING_TEMPLATES.get(splitter)
 
@@ -135,7 +139,21 @@ def generate_chunking_code(config: ExportConfig) -> str:
     # Build format kwargs based on splitter type
     format_kwargs = {}
 
-    if splitter == "RecursiveCharacterTextSplitter":
+    # Docling chunkers
+    if splitter == "HierarchicalChunker":
+        format_kwargs = {
+            "include_headers": params.get("include_headers", True),
+            "merge_small_chunks": params.get("merge_small_chunks", True),
+            "min_chunk_size": params.get("min_chunk_size", 50),
+        }
+    elif splitter == "HybridChunker":
+        format_kwargs = {
+            "max_tokens": params.get("max_tokens", 512),
+            "chunk_overlap": params.get("chunk_overlap", 50),
+            "tokenizer": params.get("tokenizer", "cl100k_base"),
+        }
+    # Legacy LangChain splitters
+    elif splitter == "RecursiveCharacterTextSplitter":
         format_kwargs = {
             "chunk_size": params.get("chunk_size", 500),
             "chunk_overlap": params.get("chunk_overlap", 50),
@@ -237,8 +255,8 @@ def generate_installation_command(config: ExportConfig) -> str:
         deps.update(PARSER_DEPENDENCIES["docling"])
 
     # Splitter dependencies
-    splitter = config.chunking_params.get("splitter", "RecursiveCharacterTextSplitter")
-    splitter_deps = SPLITTER_DEPENDENCIES.get(splitter, ["langchain-text-splitters"])
+    splitter = config.chunking_params.get("splitter", "HybridChunker")
+    splitter_deps = SPLITTER_DEPENDENCIES.get(splitter, [])
     deps.update(splitter_deps)
 
     # Embedding dependencies
@@ -252,14 +270,20 @@ def generate_installation_command(config: ExportConfig) -> str:
 
 def get_config_summary(config: ExportConfig) -> dict[str, str]:
     """Get a summary of the configuration for display."""
-    splitter = config.chunking_params.get("splitter", "RecursiveCharacterTextSplitter")
-    chunk_size = config.chunking_params.get("chunk_size", 500)
+    splitter = config.chunking_params.get("splitter", "HybridChunker")
+    # Use max_tokens for Docling chunkers, chunk_size for legacy
+    if splitter in ["HierarchicalChunker", "HybridChunker"]:
+        chunk_size = config.chunking_params.get("max_tokens", 512)
+        chunk_size_label = "max_tokens"
+    else:
+        chunk_size = config.chunking_params.get("chunk_size", 500)
+        chunk_size_label = "chunk_size"
     chunk_overlap = config.chunking_params.get("chunk_overlap", 50)
 
     return {
         "parser": "docling",
         "splitter": splitter,
-        "chunk_size": str(chunk_size),
+        chunk_size_label: str(chunk_size),
         "chunk_overlap": str(chunk_overlap),
         "embedding_model": config.embedding_model,
         "file_format": config.file_format or "PDF",

@@ -49,3 +49,5 @@ NOT:
 - “AI toy UI”
 
 NO EMOJIS!!
+
+Use /dev/null in Git Bash, not nul.
