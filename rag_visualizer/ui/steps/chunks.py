@@ -1,6 +1,7 @@
 import hashlib
 import html
 import json
+import time
 
 import streamlit as st
 import streamlit_shadcn_ui as ui
@@ -13,6 +14,46 @@ except ImportError:
 from rag_visualizer.services.chunking import get_chunks
 from rag_visualizer.services.storage import get_storage_dir, load_document
 from rag_visualizer.utils.parsers import parse_document
+
+def _find_text_overlap(prev_text: str, curr_text: str) -> int:
+    """Find max length where prev_text suffix matches curr_text prefix."""
+    if not prev_text or not curr_text:
+        return 0
+    max_len = min(len(prev_text), len(curr_text))
+    for size in range(max_len, 0, -1):
+        if prev_text.endswith(curr_text[:size]):
+            return size
+    return 0
+
+
+def _normalize_whitespace(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _normalize_for_overlap(text: str) -> str:
+    """Normalize text for overlap comparison (whitespace-insensitive)."""
+    return " ".join(text.split()).strip()
+
+
+def _normalized_prefix_length(text: str, normalized_len: int) -> int:
+    """Map normalized prefix length back to original text prefix length."""
+    if normalized_len <= 0:
+        return 0
+    normalized_count = 0
+    prefix_len = 0
+    in_space = False
+    for i, ch in enumerate(text):
+        prefix_len = i + 1
+        if ch.isspace():
+            if not in_space and normalized_count > 0:
+                normalized_count += 1
+            in_space = True
+        else:
+            normalized_count += 1
+            in_space = False
+        if normalized_count >= normalized_len:
+            break
+    return prefix_len
 
 
 def _extract_docling_metadata(metadata: dict) -> dict:
@@ -345,14 +386,73 @@ def render_chunks_step() -> None:
         overlap_len = 0
         
         if i > 0:
-            prev_chunk = sorted_chunks[i-1]
+            prev_chunk = sorted_chunks[i - 1]
             calc_overlap = prev_chunk.end_index - chunk.start_index
             if calc_overlap > 0:
-                overlap_len = calc_overlap
+                index_overlap_len = min(calc_overlap, len(chunk.text))
+            else:
+                index_overlap_len = 0
+
+            if index_overlap_len >= len(chunk.text):
+                index_overlap_len = 0
+
+            text_overlap_len = _find_text_overlap(prev_chunk.text, chunk.text)
+            source_overlap_text = ""
+            normalized_prefix_match = False
+            if index_overlap_len > 0:
+                source_overlap_text = source_text[
+                    chunk.start_index : chunk.start_index + index_overlap_len
+                ]
+                normalized_prefix_match = _normalize_whitespace(
+                    source_overlap_text
+                ) == _normalize_whitespace(chunk.text[:index_overlap_len])
+
+            use_index_overlap = index_overlap_len > 0 and (
+                prev_chunk.text.endswith(chunk.text[:index_overlap_len])
+                or normalized_prefix_match
+            )
+            overlap_len = index_overlap_len if use_index_overlap else text_overlap_len
+
+            if overlap_len > 0:
                 overlap_text = chunk.text[:overlap_len]
                 main_text = chunk.text[overlap_len:]
                 chunks_with_overlap += 1
                 total_overlap_len += overlap_len
+
+            if index_overlap_len > 0 and not use_index_overlap:
+                normalized_prev = _normalize_for_overlap(prev_chunk.text)
+                normalized_curr = _normalize_for_overlap(chunk.text)
+                normalized_overlap_len = _find_text_overlap(
+                    normalized_prev,
+                    normalized_curr,
+                )
+                if normalized_overlap_len > 0:
+                    normalized_mapped_len = _normalized_prefix_length(
+                        chunk.text, normalized_overlap_len
+                    )
+                    if normalized_mapped_len > overlap_len:
+                        overlap_len = normalized_mapped_len
+                        overlap_text = chunk.text[:overlap_len]
+                        main_text = chunk.text[overlap_len:]
+                        chunks_with_overlap += 1
+                        total_overlap_len += overlap_len
+            elif index_overlap_len == 0 and text_overlap_len == 0:
+                normalized_prev = _normalize_for_overlap(prev_chunk.text)
+                normalized_curr = _normalize_for_overlap(chunk.text)
+                normalized_overlap_len = _find_text_overlap(
+                    normalized_prev,
+                    normalized_curr,
+                )
+                if normalized_overlap_len > 0:
+                    normalized_mapped_len = _normalized_prefix_length(
+                        chunk.text, normalized_overlap_len
+                    )
+                    if 0 < normalized_mapped_len < len(chunk.text):
+                        overlap_len = normalized_mapped_len
+                        overlap_text = chunk.text[:overlap_len]
+                        main_text = chunk.text[overlap_len:]
+                        chunks_with_overlap += 1
+                        total_overlap_len += overlap_len
         
         docling_meta = _extract_docling_metadata(chunk.metadata)
         chunk_display_data.append({
