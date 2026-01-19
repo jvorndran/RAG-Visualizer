@@ -8,10 +8,9 @@ Manages the ~/.rag-visualizer/ directory for storing:
 """
 
 import json
-import os
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import streamlit as st
 
@@ -280,7 +279,7 @@ SESSION_STATE_FILE = "session_state.json"
 VECTOR_STORE_DIR = "current_vector_store"
 
 
-def save_session_state(state_data: dict) -> None:
+def save_session_state(state_data: dict[str, Any]) -> None:
     """Save session state data to disk for persistence across refreshes.
     
     Args:
@@ -293,7 +292,7 @@ def save_session_state(state_data: dict) -> None:
     state_dir.mkdir(parents=True, exist_ok=True)
     
     # Prepare data for JSON serialization
-    serializable = {}
+    serializable: dict[str, Any] = {}
     
     # Save basic fields
     if "doc_name" in state_data:
@@ -309,12 +308,14 @@ def save_session_state(state_data: dict) -> None:
     if "chunks" in state_data and state_data["chunks"]:
         chunks_data = []
         for chunk in state_data["chunks"]:
-            chunks_data.append({
-                "text": chunk.text,
-                "metadata": chunk.metadata,
-                "start_index": getattr(chunk, "start_index", 0),
-                "end_index": getattr(chunk, "end_index", len(chunk.text)),
-            })
+            chunks_data.append(
+                {
+                    "text": chunk.text,
+                    "metadata": chunk.metadata,
+                    "start_index": getattr(chunk, "start_index", 0),
+                    "end_index": getattr(chunk, "end_index", len(chunk.text)),
+                }
+            )
         serializable["chunks"] = chunks_data
     
     # Save embeddings result metadata
@@ -344,7 +345,7 @@ def save_session_state(state_data: dict) -> None:
     (state_dir / SESSION_STATE_FILE).write_text(json.dumps(serializable, indent=2))
 
 
-def load_session_state() -> dict | None:
+def load_session_state() -> dict[str, Any] | None:
     """Load persisted session state from disk.
     
     Returns:
@@ -362,11 +363,11 @@ def load_session_state() -> dict | None:
         return None
     
     try:
-        serializable = json.loads(state_file.read_text())
+        serializable = cast(dict[str, Any], json.loads(state_file.read_text()))
     except (OSError, json.JSONDecodeError):
         return None
     
-    state_data = {}
+    state_data: dict[str, Any] = {}
     
     # Restore basic fields
     if "doc_name" in serializable:
@@ -380,7 +381,7 @@ def load_session_state() -> dict | None:
     
     # Restore chunks
     if "chunks" in serializable:
-        chunks = []
+        chunks: list[Chunk] = []
         for cd in serializable["chunks"]:
             chunks.append(Chunk(
                 text=cd["text"],
@@ -431,7 +432,7 @@ def clear_session_state() -> None:
 LLM_CONFIG_FILE = "llm_config.json"
 
 
-def save_llm_config(config_data: dict) -> None:
+def save_llm_config(config_data: dict[str, Any]) -> None:
     """Save LLM configuration to disk for persistence across sessions.
     
     Args:
@@ -456,7 +457,7 @@ def save_llm_config(config_data: dict) -> None:
     (config_dir / LLM_CONFIG_FILE).write_text(json.dumps(safe_config, indent=2))
 
 
-def load_llm_config() -> dict | None:
+def load_llm_config() -> dict[str, Any] | None:
     """Load persisted LLM configuration from disk.
     
     Returns:
@@ -469,7 +470,7 @@ def load_llm_config() -> dict | None:
         return None
     
     try:
-        return json.loads(config_file.read_text())
+        return cast(dict[str, Any], json.loads(config_file.read_text()))
     except (OSError, json.JSONDecodeError):
         return None
 
@@ -487,7 +488,7 @@ def clear_llm_config() -> None:
 RAG_CONFIG_FILE = "rag_config.json"
 
 
-def save_rag_config(config_data: dict) -> None:
+def save_rag_config(config_data: dict[str, Any]) -> None:
     """Save RAG configuration to disk for persistence across refreshes.
 
     Args:
@@ -502,7 +503,7 @@ def save_rag_config(config_data: dict) -> None:
     (config_dir / RAG_CONFIG_FILE).write_text(json.dumps(config_data, indent=2))
 
 
-def load_rag_config() -> dict | None:
+def load_rag_config() -> dict[str, Any] | None:
     """Load persisted RAG configuration from disk.
 
     Returns:
@@ -515,6 +516,6 @@ def load_rag_config() -> dict | None:
         return None
 
     try:
-        return json.loads(config_file.read_text())
+        return cast(dict[str, Any], json.loads(config_file.read_text()))
     except (OSError, json.JSONDecodeError):
         return None

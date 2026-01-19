@@ -132,7 +132,7 @@ st.markdown(
 
 
 @st.fragment
-def render_main_content():
+def render_main_content() -> None:
     """Render step navigation and content as a fragment.
 
     Using a fragment isolates reruns to this section only,

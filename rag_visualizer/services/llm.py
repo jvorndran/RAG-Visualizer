@@ -9,16 +9,17 @@ import os
 from collections.abc import Generator
 from dataclasses import dataclass
 from io import BytesIO
+from typing import Any, cast
 
 from PIL import Image as PILImage
 
 # Lazy imports for LLM clients
-_openai_client = None
-_anthropic_client = None
+_openai_client: Any | None = None
+_anthropic_client: Any | None = None
 
 
 # Available LLM providers and their models
-LLM_PROVIDERS = {
+LLM_PROVIDERS: dict[str, dict[str, Any]] = {
     "OpenAI": {
         "models": [
             "gpt-4o",
@@ -50,7 +51,7 @@ LLM_PROVIDERS = {
 }
 
 # Models that support vision/image input
-VISION_CAPABLE_MODELS = {
+VISION_CAPABLE_MODELS: dict[str, list[str]] = {
     "OpenAI": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
     "Anthropic": [
         "claude-sonnet-4-20250514",
@@ -89,7 +90,7 @@ class RAGContext:
     scores: list[float] | None = None
 
 
-def _get_openai_client(api_key: str, base_url: str | None = None):  # type: ignore[no-any-return]  # noqa: ANN202
+def _get_openai_client(api_key: str, base_url: str | None = None) -> Any:
     """Get or create OpenAI client."""
     try:
         from openai import OpenAI
@@ -100,7 +101,7 @@ def _get_openai_client(api_key: str, base_url: str | None = None):  # type: igno
         ) from err
 
 
-def _get_anthropic_client(api_key: str):  # type: ignore[no-any-return]  # noqa: ANN202
+def _get_anthropic_client(api_key: str) -> Any:
     """Get or create Anthropic client."""
     try:
         from anthropic import Anthropic
@@ -199,7 +200,7 @@ def _generate_openai(config: LLMConfig, system_prompt: str, user_prompt: str) ->
         max_tokens=config.max_tokens,
     )
     
-    return response.choices[0].message.content
+    return cast(str, response.choices[0].message.content)
 
 
 def _generate_openai_stream(
@@ -220,8 +221,9 @@ def _generate_openai_stream(
     )
     
     for chunk in stream:
-        if chunk.choices[0].delta.content:
-            yield chunk.choices[0].delta.content
+        content = chunk.choices[0].delta.content
+        if content:
+            yield cast(str, content)
 
 
 def _generate_anthropic(config: LLMConfig, system_prompt: str, user_prompt: str) -> str:
@@ -237,7 +239,7 @@ def _generate_anthropic(config: LLMConfig, system_prompt: str, user_prompt: str)
         ],
     )
     
-    return response.content[0].text
+    return cast(str, response.content[0].text)
 
 
 def _generate_anthropic_stream(
@@ -268,7 +270,7 @@ def get_api_key_from_env(provider: str) -> str | None:
     return None
 
 
-def list_providers() -> list[dict]:
+def list_providers() -> list[dict[str, Any]]:
     """List available LLM providers with their details."""
     return [
         {"name": name, **info}
@@ -280,7 +282,7 @@ def get_provider_models(provider: str) -> list[str]:
     """Get available models for a provider."""
     if provider not in LLM_PROVIDERS:
         return []
-    return LLM_PROVIDERS[provider].get("models", [])
+    return cast(list[str], LLM_PROVIDERS[provider].get("models", []))
 
 
 def validate_config(config: LLMConfig) -> tuple[bool, str]:
@@ -458,7 +460,7 @@ def _generate_image_caption_openai(
         temperature=0.3,
     )
 
-    return response.choices[0].message.content
+    return cast(str, response.choices[0].message.content)
 
 
 def _generate_image_caption_anthropic(
@@ -497,7 +499,7 @@ def _generate_image_caption_anthropic(
         ],
     )
 
-    return response.content[0].text
+    return cast(str, response.content[0].text)
 
 
 def generate_image_caption(

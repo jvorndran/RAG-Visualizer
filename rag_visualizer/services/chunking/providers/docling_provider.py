@@ -291,7 +291,7 @@ class DoclingProvider(ChunkingProvider):
                 )
             ]
 
-        chunks = []
+        chunks: list[Chunk] = []
         current_headers: list[str] = []
         current_heading_text: str = ""
         pending_chunk: dict[str, Any] | None = None
@@ -395,7 +395,7 @@ class DoclingProvider(ChunkingProvider):
                 include_metadata=include_metadata,
             )
 
-        chunks = []
+        chunks: list[Chunk] = []
         current_text = ""
         current_start = 0
         current_headers: list[str] = []
@@ -548,7 +548,7 @@ class DoclingProvider(ChunkingProvider):
         """Split text into chunks based on token count."""
         if include_metadata is None:
             include_metadata = ["section_hierarchy"]
-        chunks = []
+        chunks: list[Chunk] = []
         words = text.split()
         current_words: list[str] = []
         current_start = 0

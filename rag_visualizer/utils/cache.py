@@ -6,12 +6,12 @@ re-parsing documents with the same parameters.
 
 import hashlib
 import json
-from pathlib import Path
+from typing import Any
 
 from rag_visualizer.services.storage import get_storage_dir
 
 
-def get_parsed_text_key(doc_name: str, parsing_params: dict) -> str:
+def get_parsed_text_key(doc_name: str, parsing_params: dict[str, Any]) -> str:
     """Get a stable key for parsed text storage.
     
     Args:
@@ -26,7 +26,7 @@ def get_parsed_text_key(doc_name: str, parsing_params: dict) -> str:
     return f"parsed_text_{doc_name}_{params_str}"
 
 
-def get_parsed_text_filename(doc_name: str, parsing_params: dict) -> str:
+def get_parsed_text_filename(doc_name: str, parsing_params: dict[str, Any]) -> str:
     """Get a safe filename for parsed text storage.
     
     Args:
@@ -44,7 +44,9 @@ def get_parsed_text_filename(doc_name: str, parsing_params: dict) -> str:
     return f"{safe_doc_name}_{key_hash}.txt"
 
 
-def save_parsed_text(doc_name: str, parsing_params: dict, parsed_text: str) -> None:
+def save_parsed_text(
+    doc_name: str, parsing_params: dict[str, Any], parsed_text: str
+) -> None:
     """Save parsed text to persistent storage.
     
     Args:
@@ -69,7 +71,9 @@ def save_parsed_text(doc_name: str, parsing_params: dict, parsed_text: str) -> N
         raise OSError(f"Failed to save cached parsed text for {doc_name}: {e}") from e
 
 
-def load_parsed_text(doc_name: str, parsing_params: dict) -> str | None:
+def load_parsed_text(
+    doc_name: str, parsing_params: dict[str, Any]
+) -> str | None:
     """Load parsed text from persistent storage.
     
     Args:

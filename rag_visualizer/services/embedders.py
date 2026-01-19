@@ -4,16 +4,17 @@ Embedding models for RAG-Visualizer.
 Provides a unified interface for generating embeddings using sentence-transformers.
 """
 
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
+from numpy.typing import NDArray
 import streamlit as st
 
 # Lazy import to avoid slow startup
-_SentenceTransformer = None
+_SentenceTransformer: Any | None = None
 
 
-def _get_sentence_transformer():  # type: ignore[no-any-return]  # noqa: ANN202
+def _get_sentence_transformer() -> Any:
     """Lazy load SentenceTransformer to speed up imports."""
     global _SentenceTransformer
     if _SentenceTransformer is None:
@@ -23,7 +24,7 @@ def _get_sentence_transformer():  # type: ignore[no-any-return]  # noqa: ANN202
 
 
 # Available embedding models with their dimensions
-EMBEDDING_MODELS = {
+EMBEDDING_MODELS: dict[str, dict[str, Any]] = {
     "all-MiniLM-L6-v2": {
         "dimension": 384,
         "description": "Fast, lightweight model (22M params). Good for experimentation.",
@@ -60,11 +61,11 @@ class Embedder:
             device: Device to run on ('cpu', 'cuda', or None for auto-detect)
         """
         self.model_name = model_name
-        self._model = None
+        self._model: Any | None = None
         self._device = device
 
     @property
-    def model(self):  # type: ignore[no-any-return]  # noqa: ANN201
+    def model(self) -> Any:
         """Lazy load the model on first use."""
         if self._model is None:
             sentence_transformer = _get_sentence_transformer()
@@ -77,7 +78,7 @@ class Embedder:
     def dimension(self) -> int:
         """Get the embedding dimension for this model."""
         if self.model_name in EMBEDDING_MODELS:
-            return EMBEDDING_MODELS[self.model_name]["dimension"]
+            return cast(int, EMBEDDING_MODELS[self.model_name]["dimension"])
         # Fallback: get dimension from the model itself
         return self.model.get_sentence_embedding_dimension()
 
@@ -87,7 +88,7 @@ class Embedder:
         batch_size: int = 32,
         show_progress: bool = False,
         normalize: bool = True,
-    ) -> np.ndarray:
+    ) -> NDArray[Any]:
         """Generate embeddings for a list of texts.
 
         Args:
@@ -109,10 +110,9 @@ class Embedder:
             normalize_embeddings=normalize,
             convert_to_numpy=True,
         )
+        return cast(NDArray[Any], embeddings)
 
-        return embeddings
-
-    def embed_query(self, query: str, normalize: bool = True) -> np.ndarray:
+    def embed_query(self, query: str, normalize: bool = True) -> NDArray[Any]:
         """Generate embedding for a single query.
 
         Args:
@@ -127,7 +127,7 @@ class Embedder:
             normalize_embeddings=normalize,
             convert_to_numpy=True,
         )
-        return embedding
+        return cast(NDArray[Any], embedding)
 
 
 @st.cache_resource
@@ -148,7 +148,7 @@ def get_embedder(
     return Embedder(model_name=model_name, **kwargs)
 
 
-def list_available_models() -> list[dict]:
+def list_available_models() -> list[dict[str, Any]]:
     """List all available embedding models with their details.
 
     Returns:

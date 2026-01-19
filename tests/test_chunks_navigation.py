@@ -1,9 +1,9 @@
 """Tests for chunks.py navigation - 'Go to Upload Step' button functionality."""
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import MagicMock, patch
 
 
 class SessionState(dict):

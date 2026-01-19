@@ -6,31 +6,35 @@ Supports parsing PDF, TXT, MD, and DOCX files into plain text.
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 import streamlit as st
 from PIL import Image as PILImage
 
+Document: Any | None
 try:
-    from docx import Document
+    from docx import Document as DocxDocument
+    Document = DocxDocument
 except ImportError:
     Document = None
 
+markdown: Any | None
 try:
-    import markdown
+    import markdown  # type: ignore[import-untyped]
 except ImportError:
     markdown = None
 
 # These are now required dependencies
 from docling.backend.docling_parse_v4_backend import DoclingParseV4DocumentBackend
-from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
+from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import TableStructureOptions
 from docling.document_converter import DocumentConverter, FormatOption
-from docling.pipeline.standard_pdf_pipeline import (
+from docling.pipeline.standard_pdf_pipeline import (  # type: ignore[attr-defined]
     StandardPdfPipeline,
     ThreadedPdfPipelineOptions,
 )
-from docling_core.types.doc import DocItemLabel, PictureItem
+from docling_core.types.doc import DocItemLabel, PictureItem  # type: ignore[attr-defined]
 
 # Mapping of file extensions to Docling InputFormat
 DOCLING_FORMAT_MAP = {
@@ -75,7 +79,12 @@ def _get_docling_converter(
         ),
         do_ocr=enable_ocr,
         do_table_structure=enable_table_structure,
-        table_structure_options=TableStructureOptions(enable_table_matching=True, enable_table_merging=True, enable_table_splitting=True, enable_table_reconstruction=True),
+        table_structure_options=cast(Any, TableStructureOptions)(
+            enable_table_matching=True,
+            enable_table_merging=True,
+            enable_table_splitting=True,
+            enable_table_reconstruction=True,
+        ),
         # Disable non-essential outputs for speed
         generate_page_images=False,
         generate_table_images=False,
@@ -127,7 +136,7 @@ def _get_docling_converter_with_images(
         ),
         do_ocr=enable_ocr,
         do_table_structure=enable_table_structure,
-        table_structure_options=TableStructureOptions(
+        table_structure_options=cast(Any, TableStructureOptions)(
             enable_table_matching=True,
             enable_table_merging=True,
             enable_table_splitting=True,
@@ -154,9 +163,9 @@ def _get_docling_converter_with_images(
     )
 
 
-def _extract_images_from_docling(doc: object) -> list[ExtractedImage]:
+def _extract_images_from_docling(doc: Any) -> list[ExtractedImage]:
     """Extract images from a docling document result."""
-    images = []
+    images: list[ExtractedImage] = []
     index = 1
 
     for item, _level in doc.iterate_items():
@@ -186,7 +195,7 @@ def _extract_images_from_docling(doc: object) -> list[ExtractedImage]:
     return images
 
 
-def _filter_docling_items(doc: object, filter_labels: list[DocItemLabel]) -> str:
+def _filter_docling_items(doc: Any, filter_labels: list[DocItemLabel]) -> str:
     """Export docling document to markdown with specific items filtered out.
     
     Args:
@@ -198,11 +207,11 @@ def _filter_docling_items(doc: object, filter_labels: list[DocItemLabel]) -> str
     """
     if not filter_labels:
         # No filtering needed, use default export
-        return doc.export_to_markdown()
+        return cast(str, doc.export_to_markdown())
     
     # Manually build markdown by iterating through items and skipping filtered ones
     
-    markdown_parts = []
+    markdown_parts: list[str] = []
     
     for item, _level in doc.iterate_items():
         # Skip items with filtered labels
@@ -224,10 +233,16 @@ def _filter_docling_items(doc: object, filter_labels: list[DocItemLabel]) -> str
             # Skip items that fail to export
             continue
     
-    return "\n\n".join(markdown_parts) if markdown_parts else doc.export_to_markdown()
+    if markdown_parts:
+        return "\n\n".join(markdown_parts)
+    return cast(str, doc.export_to_markdown())
 
 
-def export_document(doc: object, output_format: str, filter_labels: list | None = None) -> str:
+def export_document(
+    doc: Any,
+    output_format: str,
+    filter_labels: list[DocItemLabel] | None = None,
+) -> str:
     """Export a Docling document to the specified format.
 
     Args:
@@ -242,22 +257,22 @@ def export_document(doc: object, output_format: str, filter_labels: list | None 
         # Use filtering for markdown export
         if filter_labels:
             return _filter_docling_items(doc, filter_labels)
-        return doc.export_to_markdown()
+        return cast(str, doc.export_to_markdown())
     elif output_format == "html":
-        return doc.export_to_html()
+        return cast(str, doc.export_to_html())
     elif output_format == "doctags":
-        return doc.export_to_document_tokens()
+        return cast(str, doc.export_to_document_tokens())
     elif output_format == "json":
-        return doc.model_dump_json()
+        return cast(str, doc.model_dump_json())
     else:
         # Default to markdown
         if filter_labels:
             return _filter_docling_items(doc, filter_labels)
-        return doc.export_to_markdown()
+        return cast(str, doc.export_to_markdown())
 
 
 def parse_pdf_docling(
-    content: bytes, params: dict | None = None
+    content: bytes, params: dict[str, Any] | None = None
 ) -> tuple[str, list[ExtractedImage]]:
     """Parse PDF content using Docling engine.
 
@@ -291,8 +306,8 @@ def parse_pdf_docling(
     output_format = params.get("output_format", "markdown")
 
     # Build list of labels to filter from the list of label names (markdown only)
-    filter_label_names = params.get("docling_filter_labels", [])
-    filter_labels = []
+    filter_label_names = cast(list[str], params.get("docling_filter_labels", []))
+    filter_labels: list[DocItemLabel] = []
     for label_name in filter_label_names:
         try:
             filter_labels.append(DocItemLabel(label_name.lower()))
@@ -348,7 +363,7 @@ def parse_pdf_docling(
 
 
 def parse_pdf(
-    content: bytes, params: dict | None = None
+    content: bytes, params: dict[str, Any] | None = None
 ) -> tuple[str, list[ExtractedImage]]:
     """Parse PDF content using Docling.
 
@@ -368,7 +383,7 @@ def parse_pdf(
 def parse_with_docling(
     content: bytes,
     extension: str,
-    params: dict | None = None,
+    params: dict[str, Any] | None = None,
 ) -> tuple[str, list[ExtractedImage]]:
     """Parse document content using Docling for supported formats.
 
@@ -400,8 +415,8 @@ def parse_with_docling(
     output_format = params.get("output_format", "markdown")
 
     # Build list of labels to filter from the list of label names (markdown only)
-    filter_label_names = params.get("docling_filter_labels", [])
-    filter_labels = []
+    filter_label_names = cast(list[str], params.get("docling_filter_labels", []))
+    filter_labels: list[DocItemLabel] = []
     for label_name in filter_label_names:
         try:
             filter_labels.append(DocItemLabel(label_name.lower()))
@@ -440,7 +455,7 @@ def parse_with_docling(
         raise ValueError(f"Failed to parse {format_name} with Docling: {str(e)}") from e
 
 
-def _extract_table_as_markdown(table: object) -> str:
+def _extract_table_as_markdown(table: Any) -> str:
     """Extract DOCX table as markdown-style text.
 
     Args:
@@ -449,7 +464,7 @@ def _extract_table_as_markdown(table: object) -> str:
     Returns:
         Markdown-formatted table text
     """
-    rows = []
+    rows: list[str] = []
     for row in table.rows:
         cells = [cell.text.strip() for cell in row.cells]
         rows.append(" | ".join(cells))
@@ -462,7 +477,7 @@ def _extract_table_as_markdown(table: object) -> str:
     return ""
 
 
-def parse_docx(content: bytes, params: dict | None = None) -> str:
+def parse_docx(content: bytes, params: dict[str, Any] | None = None) -> str:
     """Parse DOCX content with optional markdown conversion.
 
     Args:
@@ -526,7 +541,7 @@ def parse_docx(content: bytes, params: dict | None = None) -> str:
         raise ValueError(f"Failed to parse DOCX: {str(e)}") from e
 
 
-def parse_markdown(content: bytes, params: dict | None = None) -> str:
+def parse_markdown(content: bytes, params: dict[str, Any] | None = None) -> str:
     """Parse Markdown content.
 
     Args:
@@ -709,7 +724,9 @@ def insert_image_placeholders(text: str, images: list[ExtractedImage]) -> str:
 
 
 def parse_document(
-    filename: str, content: bytes, params: dict | None = None
+    filename: str,
+    content: bytes,
+    params: dict[str, Any] | None = None,
 ) -> tuple[str, str, list[ExtractedImage]]:
     """Parse a document based on its file extension.
 

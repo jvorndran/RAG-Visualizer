@@ -1,4 +1,5 @@
 import os
+from typing import cast
 
 import streamlit as st
 import streamlit_shadcn_ui as ui
@@ -11,7 +12,6 @@ from rag_visualizer.services.chunking import (
 from rag_visualizer.services.chunking.providers.docling_provider import METADATA_OPTIONS
 from rag_visualizer.services.embedders import DEFAULT_MODEL, list_available_models
 from rag_visualizer.services.llm import (
-    DEFAULT_SYSTEM_PROMPT,
     LLM_PROVIDERS,
     LLMConfig,
     get_api_key_from_env,
@@ -546,7 +546,7 @@ def render_rag_config_sidebar() -> None:
         keys_to_keep = {
             "session_restored", "doc_name", "chunking_params", "embedding_model_name",
             "llm_provider", "llm_model", "llm_api_key", "llm_base_url",
-            "llm_temperature", "llm_max_tokens", "llm_system_prompt",
+            "llm_temperature", "llm_max_tokens",
             "current_step"  # Keep current step to avoid navigation issues
         }
         keys_to_delete = [key for key in st.session_state.keys() if key not in keys_to_keep]
@@ -558,7 +558,7 @@ def render_rag_config_sidebar() -> None:
 
 def render_llm_sidebar() -> None:
     """Render LLM configuration in the sidebar."""
-    st.markdown("### 🤖 LLM Configuration")
+    st.markdown("### LLM Configuration")
     
     # Initialize session state if not present
     if "llm_provider" not in st.session_state:
@@ -573,12 +573,10 @@ def render_llm_sidebar() -> None:
         st.session_state.llm_temperature = 0.7
     if "llm_max_tokens" not in st.session_state:
         st.session_state.llm_max_tokens = 1024
-    if "llm_system_prompt" not in st.session_state:
-        st.session_state.llm_system_prompt = DEFAULT_SYSTEM_PROMPT
     
     # Provider selection
     providers = list(LLM_PROVIDERS.keys())
-    current_provider = st.session_state.llm_provider
+    current_provider = cast(str, st.session_state.llm_provider)
     if current_provider not in providers:
         current_provider = providers[0]
 
@@ -586,10 +584,13 @@ def render_llm_sidebar() -> None:
     if "sidebar_provider" not in st.session_state:
         st.session_state["sidebar_provider"] = current_provider
 
-    provider = ui.select(
+    provider = cast(
+        str,
+        ui.select(
         options=providers,
         key="sidebar_provider",
         label="Provider"
+        ),
     )
     st.session_state.llm_provider = provider
     
@@ -620,7 +621,7 @@ def render_llm_sidebar() -> None:
         )
         st.session_state.llm_model = model
     else:
-        default_model = LLM_PROVIDERS[provider]["default"]
+        default_model = cast(str, LLM_PROVIDERS[provider]["default"])
         current_model = st.session_state.llm_model or default_model
         if current_model not in models:
             current_model = default_model
@@ -694,14 +695,6 @@ def render_llm_sidebar() -> None:
         )
         st.session_state.llm_max_tokens = max_tokens
         
-        system_prompt = st.text_area(
-            "System Prompt",
-            value=st.session_state.llm_system_prompt,
-            height=100,
-            key="sidebar_system_prompt",
-            help="Instructions for how the model should behave."
-        )
-        st.session_state.llm_system_prompt = system_prompt
     
     st.write("")
 
@@ -714,7 +707,6 @@ def render_llm_sidebar() -> None:
             "base_url": base_url if provider == "OpenAI-Compatible" else None,
             "temperature": temperature,
             "max_tokens": max_tokens,
-            "system_prompt": system_prompt,
         }
         save_llm_config(config_data)
     

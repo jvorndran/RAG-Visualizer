@@ -1,6 +1,7 @@
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
+from numpy.typing import NDArray
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -15,8 +16,8 @@ def _get_umap_reducer(n_components: int = 2, random_state: int = 42) -> umap.UMA
 
 @st.cache_data
 def reduce_dimensions(
-    embeddings: np.ndarray, n_components: int = 2, random_state: int = 42
-) -> tuple[np.ndarray, Any]:
+    embeddings: NDArray[Any], n_components: int = 2, random_state: int = 42
+) -> tuple[NDArray[Any], umap.UMAP | None]:
     """Reduce dimensionality of embeddings using UMAP.
 
     Args:
@@ -39,11 +40,11 @@ def reduce_dimensions(
         result = np.zeros((embeddings.shape[0], n_components))
         cols = min(embeddings.shape[1], n_components)
         result[:, :cols] = embeddings[:, :cols]
-        return result, None
+        return cast(NDArray[Any], result), None
 
     reducer = _get_umap_reducer(n_components, random_state)
     embedding_2d = reducer.fit_transform(embeddings)
-    return embedding_2d, reducer
+    return cast(NDArray[Any], embedding_2d), reducer
 
 def create_embedding_plot(
     df: pd.DataFrame,
@@ -163,7 +164,7 @@ def create_embedding_plot(
     return fig
 
 
-def calculate_similarity_matrix(embeddings: np.ndarray) -> np.ndarray:
+def calculate_similarity_matrix(embeddings: NDArray[Any]) -> NDArray[Any]:
     """Calculate pairwise cosine similarities between embeddings.
     
     Assumes embeddings are already L2-normalized (which they are from our embedders).
@@ -176,17 +177,16 @@ def calculate_similarity_matrix(embeddings: np.ndarray) -> np.ndarray:
         numpy array of shape (n_samples, n_samples) with similarity scores
     """
     if embeddings.shape[0] == 0:
-        return np.array([])
+        return cast(NDArray[Any], np.array([]))
     
     # For normalized vectors, cosine similarity = dot product
     similarity_matrix = np.dot(embeddings, embeddings.T)
-    
-    return similarity_matrix
+    return cast(NDArray[Any], similarity_matrix)
 
 
 def create_similarity_histogram(
-    similarity_matrix: np.ndarray,
-    title: str = "Pairwise Similarity Distribution"
+    similarity_matrix: NDArray[Any],
+    title: str = "Pairwise Similarity Distribution",
 ) -> go.Figure:
     """Create a histogram of pairwise similarity scores.
     

@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
 
-from tests.conftest import element_exists, get_form_submit_button
+from tests.conftest import get_form_submit_button
 
 
 class TestOutputFormatDropdownDisplay:

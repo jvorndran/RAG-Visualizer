@@ -1,5 +1,6 @@
 import html
 from pathlib import Path
+from typing import Any
 
 import streamlit as st
 import streamlit_shadcn_ui as ui
@@ -20,7 +21,7 @@ DEFAULT_MAX_DOC_CHAR_COUNT = 40_000
 
 
 def _load_or_parse_document(
-    doc_name: str, content: bytes, parsing_params: dict
+    doc_name: str, content: bytes, parsing_params: dict[str, Any]
 ) -> tuple[str, str, str | None]:
     """Load cached parsed text or parse document if cache doesn't exist.
     

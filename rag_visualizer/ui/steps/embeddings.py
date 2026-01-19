@@ -1,7 +1,10 @@
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import streamlit as st
 import streamlit_shadcn_ui as ui
+from numpy.typing import NDArray
 
 from rag_visualizer.services.chunking import get_chunks
 from rag_visualizer.services.embedders import (
@@ -14,8 +17,6 @@ from rag_visualizer.services.storage import (
 )
 from rag_visualizer.services.vector_store import create_vector_store
 from rag_visualizer.ui.components.chunk_viewer import (
-    _contextualize_chunk,
-    _extract_docling_metadata,
     prepare_chunk_display_data,
     render_chunk_cards,
 )
@@ -32,7 +33,7 @@ from rag_visualizer.utils.visualization import (
 @st.cache_data(show_spinner="Generating embeddings...")
 def generate_embeddings(
     texts: list[str], model_name: str
-) -> tuple[np.ndarray, int]:
+) -> tuple[NDArray[Any], int]:
     """Generate embeddings for texts using specified model.
 
     Cached based on texts content and model name.
@@ -63,7 +64,10 @@ def render_embeddings_step() -> None:
 
     # Check if document is selected
     if not selected_doc:
-        st.info("👋 No document selected. Upload a file in the **Upload** step or select a document in the sidebar (RAG Config tab).")
+        st.info(
+            "No document selected. Upload a file in the **Upload** step or select "
+            "a document in the sidebar (RAG Config tab)."
+        )
         if ui.button("Go to Upload Step", key="goto_upload_embeddings"):
             st.session_state.current_step = "upload"
             st.rerun()
@@ -78,7 +82,7 @@ def render_embeddings_step() -> None:
         with c2:
             st.markdown(f"**Document:** {selected_doc}")
         
-        st.caption("💡 Configure these settings in the sidebar (RAG Config tab)")
+        st.caption("Configure these settings in the sidebar (RAG Config tab)")
 
     # Document Processing Logic (Runs if chunks are missing)
     if not chunks:
@@ -305,7 +309,7 @@ def render_embeddings_step() -> None:
             class ChunkAdapter:
                 """Adapter to make SearchResult compatible with chunk viewer."""
                 text: str
-                metadata: dict
+                metadata: dict[str, Any]
                 start_index: int = 0
                 end_index: int = 0
             

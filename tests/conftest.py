@@ -4,12 +4,15 @@ These fixtures provide common setup for testing Streamlit sidebar components
 using streamlit.testing.v1.
 """
 
+from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
+from streamlit.testing.v1 import AppTest
 
 
-def element_exists(at, element_type, key):
+def element_exists(at: AppTest, element_type: str, key: str) -> bool:
     """Check if an element with the given key exists in the app.
 
     Streamlit testing API raises KeyError when element doesn't exist,
@@ -31,7 +34,7 @@ def element_exists(at, element_type, key):
         return False
 
 
-def get_form_submit_button(at, label="Save & Apply"):
+def get_form_submit_button(at: AppTest, label: str = "Save & Apply") -> Any | None:
     """Find and return the form submit button by label.
 
     Args:
@@ -48,7 +51,7 @@ def get_form_submit_button(at, label="Save & Apply"):
 
 
 @pytest.fixture
-def mock_storage_dir(tmp_path):
+def mock_storage_dir(tmp_path: Path) -> Path:
     """Create a temporary storage directory with test documents.
 
     Creates:
@@ -72,7 +75,7 @@ def mock_storage_dir(tmp_path):
 
 
 @pytest.fixture
-def sidebar_app_script():
+def sidebar_app_script() -> str:
     """Return the app script string for testing the RAG config sidebar.
 
     This fixture provides a minimal app script that renders the RAG config
@@ -122,7 +125,7 @@ with st.sidebar:
 
 
 @pytest.fixture
-def patched_storage(mock_storage_dir):
+def patched_storage(mock_storage_dir: Path) -> Any:
     """Context manager that patches the storage directory.
 
     Usage:

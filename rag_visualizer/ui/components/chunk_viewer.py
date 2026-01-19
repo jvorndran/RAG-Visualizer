@@ -3,7 +3,7 @@
 import html
 from typing import Any
 
-import markdown
+import markdown  # type: ignore[import-untyped]
 import streamlit as st
 
 
@@ -48,7 +48,7 @@ def _normalized_prefix_length(text: str, normalized_len: int) -> int:
     return prefix_len
 
 
-def _extract_docling_metadata(metadata: dict) -> dict:
+def _extract_docling_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     """Extract Docling-specific metadata from chunk metadata.
 
     Returns a dict with:
@@ -94,7 +94,7 @@ def _extract_docling_metadata(metadata: dict) -> dict:
     return result
 
 
-def _contextualize_chunk(chunk_text: str, metadata: dict) -> str:
+def _contextualize_chunk(chunk_text: str, metadata: dict[str, Any]) -> str:
     """Create contextualized text for embedding by prepending section context.
 
     This mimics Docling's chunker.contextualize() method, which produces
@@ -158,7 +158,7 @@ def prepare_chunk_display_data(
     chunks: list[Any],
     source_text: str | None = None,
     calculate_overlap: bool = False,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Prepare chunk data for visualization with optional overlap calculation.
 
     Args:
@@ -258,8 +258,8 @@ def prepare_chunk_display_data(
 
 
 def render_chunk_cards(
-    chunk_display_data: list[dict],
-    custom_badges: list[dict] | None = None,
+    chunk_display_data: list[dict[str, Any]],
+    custom_badges: list[dict[str, Any]] | None = None,
     show_overlap: bool = True,
     display_mode: str = "continuous",
 ) -> None:

@@ -7,14 +7,16 @@ Provides a wrapper around FAISS for storing and searching embeddings.
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
+from numpy.typing import NDArray
 
 # Lazy import to avoid slow startup
-_faiss = None
+_faiss: Any | None = None
 
 
-def _get_faiss():  # type: ignore[no-any-return]  # noqa: ANN202
+def _get_faiss() -> Any:
     """Lazy load FAISS to speed up imports."""
     global _faiss
     if _faiss is None:
@@ -29,7 +31,7 @@ class SearchResult:
     index: int
     score: float
     text: str
-    metadata: dict
+    metadata: dict[str, Any]
 
 
 class VectorStore:
@@ -46,9 +48,9 @@ class VectorStore:
         """
         self.dimension = dimension
         self.metric = metric
-        self._index = None
+        self._index: Any | None = None
         self._texts: list[str] = []
-        self._metadata: list[dict] = []
+        self._metadata: list[dict[str, Any]] = []
 
     def _create_index(self) -> None:
         """Create the FAISS index based on the metric."""
@@ -67,7 +69,7 @@ class VectorStore:
             )
 
     @property
-    def index(self):  # type: ignore[no-any-return]  # noqa: ANN201
+    def index(self) -> Any:
         """Get or create the FAISS index."""
         if self._index is None:
             self._create_index()
@@ -82,9 +84,9 @@ class VectorStore:
 
     def add(
         self,
-        embeddings: np.ndarray,
+        embeddings: NDArray[Any],
         texts: list[str],
-        metadata: list[dict] | None = None,
+        metadata: list[dict[str, Any]] | None = None,
     ) -> None:
         """Add embeddings to the vector store.
 
@@ -123,7 +125,7 @@ class VectorStore:
 
     def search(
         self,
-        query_embedding: np.ndarray,
+        query_embedding: NDArray[Any],
         k: int = 5,
     ) -> list[SearchResult]:
         """Search for similar vectors.
@@ -168,7 +170,7 @@ class VectorStore:
 
         return results
 
-    def get_all_embeddings(self) -> np.ndarray:
+    def get_all_embeddings(self) -> NDArray[np.float32]:
         """Retrieve all embeddings from the store.
 
         Returns:
@@ -181,14 +183,13 @@ class VectorStore:
         embeddings = faiss.rev_swig_ptr(
             self.index.get_xb(), self.size * self.dimension
         ).reshape(self.size, self.dimension).copy()
-
-        return embeddings
+        return cast(NDArray[np.float32], embeddings)
 
     def get_texts(self) -> list[str]:
         """Get all stored texts."""
         return self._texts.copy()
 
-    def get_metadata(self) -> list[dict]:
+    def get_metadata(self) -> list[dict[str, Any]]:
         """Get all stored metadata."""
         return self._metadata.copy()
 
@@ -238,7 +239,7 @@ class VectorStore:
 
         # Load metadata
         with (path / "metadata.json").open(encoding="utf-8") as f:
-            metadata = json.load(f)
+            metadata = cast(dict[str, Any], json.load(f))  # noqa: S301
 
         # Create store
         store = cls(
@@ -247,8 +248,8 @@ class VectorStore:
         )
 
         # Load texts and metadata
-        store._texts = metadata["texts"]
-        store._metadata = metadata["metadata"]
+        store._texts = cast(list[str], metadata["texts"])
+        store._metadata = cast(list[dict[str, Any]], metadata["metadata"])
 
         # Load FAISS index if it exists
         index_path = path / "index.faiss"
