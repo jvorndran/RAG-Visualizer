@@ -1,7 +1,0 @@
-- Add tooltips
-- Data inspector tab needs some work
-- Add more models
-- add more text splitting strategies.
-- different chart views on vector stage
-- Make it so it can handle charts and graphs
-- add image handling
