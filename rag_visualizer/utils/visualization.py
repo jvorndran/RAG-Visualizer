@@ -264,7 +264,8 @@ def create_similarity_histogram(
 def find_outliers(
     embeddings: np.ndarray,
     chunks: list[Any],
-    n_outliers: int = 5
+    n_outliers: int = 5,
+    preview_length: int = 250
 ) -> list[dict[str, Any]]:
     """Identify chunks that are semantically distant from others.
     
@@ -275,6 +276,7 @@ def find_outliers(
         embeddings: numpy array of shape (n_samples, n_features)
         chunks: List of chunk objects corresponding to embeddings
         n_outliers: Number of outliers to return
+        preview_length: Maximum length of text preview
         
     Returns:
         List of dicts with keys: 'index', 'chunk', 'avg_similarity', 'text_preview'
@@ -305,7 +307,7 @@ def find_outliers(
             'index': int(idx),
             'chunk': chunk,
             'avg_similarity': float(avg_similarities[idx]),
-            'text_preview': chunk.text[:100] + "..." if len(chunk.text) > 100 else chunk.text
+            'text_preview': chunk.text[:preview_length] + "..." if len(chunk.text) > preview_length else chunk.text
         })
     
     return outliers

@@ -13,6 +13,10 @@ from rag_visualizer.services.storage import (
     save_session_state,
 )
 from rag_visualizer.services.vector_store import create_vector_store
+from rag_visualizer.ui.steps.chunks import (
+    _contextualize_chunk,
+    _extract_docling_metadata,
+)
 from rag_visualizer.utils.parsers import parse_document
 from rag_visualizer.utils.visualization import (
     calculate_similarity_matrix,
@@ -398,23 +402,42 @@ def render_embeddings_step() -> None:
             if outliers:
                 for i, outlier_data in enumerate(outliers):
                     chunk = outlier_data['chunk']
-                    with st.expander(
-                        f"**Chunk #{outlier_data['index']}** · Similarity: `{outlier_data['avg_similarity']:.3f}` · {len(chunk.text)} chars",
-                        expanded=False
-                    ):
-                        # Show section hierarchy if available
-                        section_hierarchy = _extract_section_hierarchy(chunk.metadata)
-                        if section_hierarchy:
-                            breadcrumb = " > ".join(section_hierarchy)
-                            st.caption(f"📍 {breadcrumb}")
+                    section_hierarchy = _extract_section_hierarchy(chunk.metadata)
+                    
+                    with st.container(border=True):
+                        # Always visible: header row with key info
+                        col_o1, col_o2 = st.columns([3, 1])
+                        with col_o1:
+                            st.markdown(f"**Chunk #{outlier_data['index']}** · {len(chunk.text)} chars")
+                            # Show section hierarchy if available
+                            if section_hierarchy:
+                                breadcrumb = " > ".join(section_hierarchy)
+                                st.caption(f"📍 {breadcrumb}")
+                        with col_o2:
+                            st.markdown("**Avg. Similarity**")
+                            st.markdown(f"`{outlier_data['avg_similarity']:.3f}`")
                         
-                        # Show full text
-                        st.markdown("**Full Text:**")
-                        st.text(chunk.text)
+                        # Always visible: text preview
+                        st.caption(outlier_data['text_preview'])
                         
-                        # Show metadata if available
-                        if chunk.metadata:
-                            st.markdown("**Metadata:**")
-                            st.json(chunk.metadata, expanded=False)
+                        # Expandable: full text and contextualized version
+                        with st.expander("Show full content & context", expanded=False):
+                            st.markdown("**Full Text:**")
+                            st.text(chunk.text)
+                            
+                            # Calculate and show contextualized text (what gets embedded)
+                            docling_meta = _extract_docling_metadata(chunk.metadata)
+                            contextualized = _contextualize_chunk(chunk.text, docling_meta)
+                            
+                            # Show extra context if any was added
+                            if contextualized != chunk.text and contextualized.endswith(chunk.text):
+                                extra_context = contextualized[: len(contextualized) - len(chunk.text)].strip()
+                                st.write("")
+                                st.markdown("**Added Context (prepended for embedding):**")
+                                st.code(extra_context, language=None)
+                                st.caption("This enriched text is sent to the embedding model for better semantic retrieval.")
+                            else:
+                                st.write("")
+                                st.caption("No extra context added to this chunk.")
             else:
                 st.info("No outliers detected.")
