@@ -195,55 +195,6 @@ def _extract_images_from_docling(doc: Any) -> list[ExtractedImage]:
     return images
 
 
-def _filter_docling_items(doc: Any, filter_labels: list[DocItemLabel]) -> str:
-    """Export docling document to markdown with specific items filtered out.
-
-    Args:
-        doc: Docling document object
-        filter_labels: List of DocItemLabel types to filter out
-
-    Returns:
-        Markdown text with filtered items removed
-    """
-    if not filter_labels:
-        # No filtering needed, use default export
-        return cast(str, doc.export_to_markdown())
-
-    # Manually build markdown by iterating through items and skipping filtered ones.
-    # This preserves markdown styling for headings when filters are enabled.
-    markdown_parts: list[str] = []
-    heading_labels = {DocItemLabel.TITLE, DocItemLabel.SECTION_HEADER}
-
-    for item, level in doc.iterate_items():
-        # Skip items with filtered labels
-        if hasattr(item, "label") and item.label in filter_labels:
-            continue
-
-        # Convert item to markdown text
-        try:
-            item_markdown = ""
-            if hasattr(item, "export_to_markdown"):
-                item_markdown = item.export_to_markdown() or ""
-            elif hasattr(item, "text"):
-                item_markdown = item.text or ""
-
-            if not item_markdown.strip():
-                continue
-
-            # Ensure heading items keep markdown header markers.
-            if hasattr(item, "label") and item.label in heading_labels:
-                if not item_markdown.lstrip().startswith("#"):
-                    heading_level = max(1, min(int(level) + 1, 6))
-                    item_markdown = f"{'#' * heading_level} {item_markdown.strip()}"
-
-            markdown_parts.append(item_markdown)
-        except Exception:
-            # Skip items that fail to export
-            continue
-
-    if markdown_parts:
-        return "\n\n".join(markdown_parts)
-    return cast(str, doc.export_to_markdown())
 
 
 def export_document(
@@ -262,9 +213,12 @@ def export_document(
         Exported document text in the specified format
     """
     if output_format == "markdown":
-        # Use filtering for markdown export
+        # Use native Docling filtering by computing the set of allowed labels
         if filter_labels:
-            return _filter_docling_items(doc, filter_labels)
+            # Get all possible labels and exclude the filtered ones
+            all_labels = set(DocItemLabel)
+            allowed_labels = all_labels - set(filter_labels)
+            return cast(str, doc.export_to_markdown(labels=allowed_labels))
         return cast(str, doc.export_to_markdown())
     elif output_format == "html":
         return cast(str, doc.export_to_html())
@@ -275,7 +229,9 @@ def export_document(
     else:
         # Default to markdown
         if filter_labels:
-            return _filter_docling_items(doc, filter_labels)
+            all_labels = set(DocItemLabel)
+            allowed_labels = all_labels - set(filter_labels)
+            return cast(str, doc.export_to_markdown(labels=allowed_labels))
         return cast(str, doc.export_to_markdown())
 
 
@@ -515,26 +471,7 @@ def parse_docx(content: bytes, params: dict[str, Any] | None = None) -> str:
 
         # Process paragraphs
         for paragraph in doc.paragraphs:
-            if not paragraph.text.strip():
-                continue
-
-            # Detect heading styles and convert to markdown
-            style_name = paragraph.style.name if paragraph.style else ""
-
-            if "Heading 1" in style_name:
-                text_parts.append(f"\n# {paragraph.text}\n")
-            elif "Heading 2" in style_name:
-                text_parts.append(f"\n## {paragraph.text}\n")
-            elif "Heading 3" in style_name:
-                text_parts.append(f"\n### {paragraph.text}\n")
-            elif "Heading 4" in style_name:
-                text_parts.append(f"\n#### {paragraph.text}\n")
-            elif "Heading 5" in style_name:
-                text_parts.append(f"\n##### {paragraph.text}\n")
-            elif "Heading 6" in style_name:
-                text_parts.append(f"\n###### {paragraph.text}\n")
-            else:
-                # Regular paragraph
+            if paragraph.text.strip():
                 text_parts.append(paragraph.text)
 
         # Process tables if enabled
@@ -613,41 +550,6 @@ def parse_text(content: bytes) -> str:
         raise ValueError("Failed to decode text file with common encodings") from None
 
 
-def _normalize_whitespace(text: str) -> str:
-    """Normalize excessive whitespace in text.
-
-    Args:
-        text: Input text
-
-    Returns:
-        Text with normalized whitespace
-    """
-    import re
-
-    # Replace multiple spaces with single space
-    text = re.sub(r" +", " ", text)
-    # Replace multiple newlines with double newline
-    text = re.sub(r"\n\n+", "\n\n", text)
-    # Remove leading/trailing whitespace from each line
-    lines = [line.strip() for line in text.split("\n")]
-    return "\n".join(lines)
-
-
-def _remove_special_chars(text: str) -> str:
-    """Remove special characters while preserving basic punctuation.
-
-    Args:
-        text: Input text
-
-    Returns:
-        Text with special characters removed
-    """
-    import re
-
-    # Keep letters, numbers, spaces, and basic punctuation (.,-!?:; and -)
-    # Hyphen must be escaped/placed last to avoid regex range errors.
-    text = re.sub(r"[^\w\s.,!?:;\n-]", "", text)
-    return text
 
 
 def _markdown_to_plain_text(text: str) -> str:
@@ -701,34 +603,6 @@ def _convert_to_format(
         return _markdown_to_plain_text(text)
     else:
         return text
-
-
-def insert_image_placeholders(text: str, images: list[ExtractedImage]) -> str:
-    """Insert image placeholders into document text for RAG indexing.
-
-    For images with captions: [Image N: caption]
-    For images without captions: [Image N]
-
-    Args:
-        text: Document text
-        images: List of extracted images
-
-    Returns:
-        Text with image placeholders appended
-    """
-    if not images:
-        return text
-
-    placeholders = []
-    for img in images:
-        if img.caption:
-            placeholders.append(f"[Image {img.index}: {img.caption}]")
-        else:
-            placeholders.append(f"[Image {img.index}]")
-
-    # Append image placeholders at the end in a dedicated section
-    image_section = "\n\n---\n\n## Document Images\n\n" + "\n\n".join(placeholders)
-    return text + image_section
 
 
 def parse_document(
@@ -789,17 +663,6 @@ def parse_document(
     # Apply output format conversion (for non-Docling parsers)
     output_format = params.get("output_format", "markdown")
     parsed_text = _convert_to_format(parsed_text, file_format, output_format)
-
-    # Apply post-processing
-    if params.get("normalize_whitespace", False):
-        parsed_text = _normalize_whitespace(parsed_text)
-
-    if params.get("remove_special_chars", False):
-        parsed_text = _remove_special_chars(parsed_text)
-
-    # Insert image placeholders into text if we have images
-    if images:
-        parsed_text = insert_image_placeholders(parsed_text, images)
 
     # Apply global character cap if provided
     max_chars = params.get("max_characters")

@@ -74,8 +74,6 @@ def render_rag_config_sidebar() -> None:
             "docling_device": "auto",
             # Output options
             "output_format": "markdown",
-            "normalize_whitespace": True,
-            "remove_special_chars": False,
             "max_characters": 40_000,
         }
 
@@ -152,22 +150,6 @@ def render_rag_config_sidebar() -> None:
         )
 
         st.write("")
-
-        # Normalize whitespace checkbox
-        normalize_whitespace = st.checkbox(
-            "Normalize Whitespace",
-            value=st.session_state.parsing_params.get("normalize_whitespace", True),
-            key="sidebar_normalize_whitespace",
-            help="Remove excessive spaces and newlines"
-        )
-
-        # Remove special chars checkbox
-        remove_special_chars = st.checkbox(
-            "Remove Special Characters",
-            value=st.session_state.parsing_params.get("remove_special_chars", False),
-            key="sidebar_remove_special_chars",
-            help="Strip non-alphanumeric characters except basic punctuation"
-        )
 
         # Advanced parsing options (Docling)
         with st.expander("Advanced Parsing Options", expanded=False):
@@ -308,8 +290,6 @@ def render_rag_config_sidebar() -> None:
         # Update parsing params (but don't apply yet)
         new_parsing_params = {
             "output_format": format_display_map.get(output_format, "markdown"),
-            "normalize_whitespace": normalize_whitespace,
-            "remove_special_chars": remove_special_chars,
             "docling_device": "auto",  # Always use auto device detection
             "docling_enable_ocr": docling_enable_ocr,
             "docling_table_structure": docling_table_structure,

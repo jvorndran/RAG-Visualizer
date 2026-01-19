@@ -114,26 +114,26 @@ def _get_anthropic_client(api_key: str) -> Any:
 
 def _build_context_prompt(context: RAGContext) -> str:
     """Build the context section of the prompt from retrieved chunks."""
-    context_parts = []
-    for i, chunk in enumerate(context.chunks):
-        score_info = f" (relevance: {context.scores[i]:.2f})" if context.scores else ""
-        context_parts.append(f"[Chunk {i+1}{score_info}]\n{chunk}")
+    if not context.chunks:
+        return ""
     
-    return "\n\n".join(context_parts)
+    parts = []
+    for i, chunk in enumerate(context.chunks):
+        if context.scores:
+            parts.append(f"[Chunk {i+1} (relevance: {context.scores[i]:.2f})]\n{chunk}")
+        else:
+            parts.append(f"[Chunk {i+1}]\n{chunk}")
+    
+    return "\n\n".join(parts)
 
 
 def _build_user_prompt(context: RAGContext) -> str:
     """Build the complete user prompt with context and question."""
     context_text = _build_context_prompt(context)
     
-    return f"""Context:
----
-{context_text}
----
-
-Question: {context.query}
-
-Please answer based on the context provided above."""
+    if context_text:
+        return f"{context_text}\n\nQuestion: {context.query}"
+    return f"Question: {context.query}"
 
 
 def generate_response(
@@ -394,11 +394,14 @@ def is_vision_capable(provider: str, model: str) -> bool:
 def _resize_image_for_captioning(
     pil_image: PILImage.Image, max_size: int = 1024
 ) -> PILImage.Image:
-    """Resize large images to reduce API costs and latency.
+    """Resize large images to optimize API costs and latency.
+    
+    This is an optimization, not required by API limits. Both OpenAI and Anthropic
+    can handle larger images, but smaller images reduce costs and improve latency.
 
     Args:
         pil_image: PIL image to resize
-        max_size: Maximum dimension (width or height)
+        max_size: Maximum dimension (width or height) in pixels
 
     Returns:
         Resized image (or original if already small enough)
@@ -431,10 +434,12 @@ def _generate_image_caption_openai(
     img_base64: str, prompt: str, config: LLMConfig
 ) -> str:
     """Generate image caption using OpenAI vision API.
+    
+    Uses standard OpenAI vision message format with text prompt and image.
 
     Args:
-        img_base64: Base64 encoded image
-        prompt: Caption prompt
+        img_base64: Base64 encoded PNG image
+        prompt: Text prompt describing the task
         config: LLM configuration
 
     Returns:
@@ -467,10 +472,13 @@ def _generate_image_caption_anthropic(
     img_base64: str, prompt: str, config: LLMConfig
 ) -> str:
     """Generate image caption using Anthropic vision API.
+    
+    Uses standard Anthropic vision message format with image and text prompt.
+    Note: Anthropic requires image content before text in the content array.
 
     Args:
-        img_base64: Base64 encoded image
-        prompt: Caption prompt
+        img_base64: Base64 encoded PNG image
+        prompt: Text prompt describing the task
         config: LLM configuration
 
     Returns:
@@ -508,11 +516,14 @@ def generate_image_caption(
     prompt: str = DEFAULT_IMAGE_CAPTION_PROMPT,
 ) -> str:
     """Generate a caption for an image using a vision-capable LLM.
+    
+    Follows standard vision prompting patterns for OpenAI and Anthropic APIs.
+    Images are optionally resized for cost/latency optimization.
 
     Args:
         pil_image: PIL image to caption
         config: LLM configuration (must be vision-capable model)
-        prompt: Caption prompt
+        prompt: Text prompt for caption generation
 
     Returns:
         Generated caption text
@@ -520,7 +531,7 @@ def generate_image_caption(
     Raises:
         ValueError: If provider doesn't support vision
     """
-    # Resize for cost efficiency
+    # Optional resize for cost/latency optimization (not required by API limits)
     resized = _resize_image_for_captioning(pil_image)
     img_base64 = _pil_to_base64(resized)
 

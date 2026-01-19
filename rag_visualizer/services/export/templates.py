@@ -59,9 +59,7 @@ def parse_pdf(file_path: str) -> str:
     )
 
     result = converter.convert(file_path)
-    text = result.document.export_to_markdown()
-{post_processing}
-    return text
+    return result.document.export_to_markdown()
 
 
 # Example usage:
@@ -73,12 +71,9 @@ PARSING_DOCX = '''"""Document Parsing for DOCX files
 
 Configuration:
 - Output Format: {output_format}
-- Normalize Whitespace: {normalize_whitespace}
-- Remove Special Characters: {remove_special_chars}
 """
 
 from docx import Document
-import re
 
 
 def parse_docx(file_path: str) -> str:
@@ -88,30 +83,16 @@ def parse_docx(file_path: str) -> str:
         file_path: Path to the DOCX file
 
     Returns:
-        Extracted text content with markdown headings
+        Extracted text content
     """
     doc = Document(file_path)
     text_parts = []
 
     for paragraph in doc.paragraphs:
-        if not paragraph.text.strip():
-            continue
-
-        style_name = paragraph.style.name if paragraph.style else ""
-
-        # Convert headings to markdown
-        if "Heading 1" in style_name:
-            text_parts.append(f"# {{paragraph.text}}")
-        elif "Heading 2" in style_name:
-            text_parts.append(f"## {{paragraph.text}}")
-        elif "Heading 3" in style_name:
-            text_parts.append(f"### {{paragraph.text}}")
-        else:
+        if paragraph.text.strip():
             text_parts.append(paragraph.text)
 
-    text = "\\n\\n".join(text_parts)
-{post_processing}
-    return text
+    return "\\n\\n".join(text_parts)
 
 
 # Example usage:
@@ -120,13 +101,7 @@ def parse_docx(file_path: str) -> str:
 '''
 
 PARSING_TEXT = '''"""Document Parsing for Text/Markdown files
-
-Configuration:
-- Normalize Whitespace: {normalize_whitespace}
-- Remove Special Characters: {remove_special_chars}
 """
-
-import re
 
 
 def parse_text(file_path: str) -> str:
@@ -139,9 +114,7 @@ def parse_text(file_path: str) -> str:
         File content as string
     """
     with open(file_path, "r", encoding="utf-8") as f:
-        text = f.read()
-{post_processing}
-    return text
+        return f.read()
 
 
 # Example usage:

@@ -67,24 +67,6 @@ class ExportConfig:
     file_format: str | None = None  # PDF, DOCX, Markdown, Text
 
 
-def _build_post_processing(params: dict[str, Any]) -> str:
-    """Build post-processing code block."""
-    lines = []
-
-    if params.get("normalize_whitespace", False):
-        lines.append("    # Normalize whitespace")
-        lines.append("    text = re.sub(r' +', ' ', text)")
-        lines.append("    text = re.sub(r'\\\\n\\\\n+', '\\\\n\\\\n', text)")
-        lines.append("    lines = [line.strip() for line in text.split('\\\\n')]")
-        lines.append("    text = '\\\\n'.join(lines)")
-
-    if params.get("remove_special_chars", False):
-        lines.append("    # Remove special characters")
-        lines.append("    text = re.sub(r'[^\\\\w\\\\s.,-!?:;\\\\n]', '', text)")
-
-    if lines:
-        return "\n" + "\n".join(lines)
-    return ""
 
 
 def _get_separator(params: dict[str, Any]) -> str:
@@ -104,16 +86,9 @@ def generate_parsing_code(config: ExportConfig) -> str:
     if file_format == "DOCX":
         return PARSING_DOCX.format(
             output_format=params.get("output_format", "markdown"),
-            normalize_whitespace=params.get("normalize_whitespace", False),
-            remove_special_chars=params.get("remove_special_chars", False),
-            post_processing=_build_post_processing(params),
         )
     elif file_format in ["Text", "Markdown"]:
-        return PARSING_TEXT.format(
-            normalize_whitespace=params.get("normalize_whitespace", False),
-            remove_special_chars=params.get("remove_special_chars", False),
-            post_processing=_build_post_processing(params),
-        )
+        return PARSING_TEXT.format()
 
     # PDF parsing with Docling
     template = PARSING_TEMPLATES["docling"]
@@ -121,7 +96,6 @@ def generate_parsing_code(config: ExportConfig) -> str:
         enable_ocr=params.get("docling_enable_ocr", False),
         enable_tables=params.get("docling_table_structure", True),
         num_threads=params.get("docling_threads", 4),
-        post_processing=_build_post_processing(params),
     )
 
 
