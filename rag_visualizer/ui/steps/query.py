@@ -14,6 +14,10 @@ from rag_visualizer.services.llm import (
     RAGContext,
     get_model,
 )
+from rag_visualizer.ui.components.chunk_viewer import (
+    prepare_chunk_display_data,
+    render_chunk_cards,
+)
 from rag_visualizer.utils.visualization import create_embedding_plot
 
 
@@ -38,39 +42,62 @@ def _render_empty_state() -> None:
             st.rerun()
 
 
-def _get_score_color(score: float) -> str:
-    """Get color hex based on score value."""
-    if score >= 0.7:
-        return "#166534" # Green
-    elif score >= 0.4:
-        return "#1e40af" # Blue
-    return "#92400e" # Yellow/Orange
-
-
 def _render_retrieved_chunks(
     results: list, show_scores: bool = True
 ) -> None:
-    """Render retrieved chunks in a compact format."""
+    """Render retrieved chunks using the chunk viewer component."""
     if not results:
         return
     
     st.markdown("#### Retrieved Context")
     
-    for _i, result in enumerate(results):
-        score_color = _get_score_color(result.score)
-        
-        with st.container(border=True):
-            col_content, col_meta = st.columns([6, 1])
-
-            with col_content:
-                st.markdown(result.text)
-
-            with col_meta:
-                if show_scores:
-                    st.markdown(
-                        f'<div style="text-align: right;"><span style="color: {score_color}; font-weight: 600; font-size: 0.9rem;">{result.score:.3f}</span></div>',
-                        unsafe_allow_html=True
-                    )
+    # Convert search results to chunks for the viewer
+    from dataclasses import dataclass
+    
+    @dataclass
+    class ChunkAdapter:
+        """Adapter to make SearchResult compatible with chunk viewer."""
+        text: str
+        metadata: dict
+        start_index: int = 0
+        end_index: int = 0
+    
+    retrieved_chunks = [
+        ChunkAdapter(
+            text=res.text,
+            metadata=res.metadata,
+            start_index=i,
+            end_index=i,
+        )
+        for i, res in enumerate(results)
+    ]
+    
+    # Prepare display data
+    retrieved_display_data = prepare_chunk_display_data(
+        chunks=retrieved_chunks,
+        source_text=None,
+        calculate_overlap=False,
+    )
+    
+    # Add similarity score as custom badge if requested
+    custom_badges = None
+    if show_scores:
+        custom_badges = [
+            {
+                "label": "Score",
+                "value": f"{res.score:.3f}",
+                "color": "#d1fae5"  # Green tint for similarity
+            }
+            for res in results
+        ]
+    
+    # Render using the reusable component in card mode
+    render_chunk_cards(
+        chunk_display_data=retrieved_display_data,
+        custom_badges=custom_badges,
+        show_overlap=False,
+        display_mode="card",
+    )
 
 
 def _get_llm_config_from_sidebar() -> tuple[LLMConfig, str]:

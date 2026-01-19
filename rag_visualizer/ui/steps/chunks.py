@@ -1,5 +1,4 @@
 import hashlib
-import html
 import json
 
 import streamlit as st
@@ -7,153 +6,11 @@ import streamlit_shadcn_ui as ui
 
 from rag_visualizer.services.chunking import get_chunks
 from rag_visualizer.services.storage import get_storage_dir, load_document
+from rag_visualizer.ui.components.chunk_viewer import (
+    prepare_chunk_display_data,
+    render_chunk_cards,
+)
 from rag_visualizer.utils.parsers import parse_document
-
-def _find_text_overlap(prev_text: str, curr_text: str) -> int:
-    """Find max length where prev_text suffix matches curr_text prefix."""
-    if not prev_text or not curr_text:
-        return 0
-    max_len = min(len(prev_text), len(curr_text))
-    for size in range(max_len, 0, -1):
-        if prev_text.endswith(curr_text[:size]):
-            return size
-    return 0
-
-
-def _normalize_whitespace(text: str) -> str:
-    return " ".join(text.split())
-
-
-def _normalize_for_overlap(text: str) -> str:
-    """Normalize text for overlap comparison (whitespace-insensitive)."""
-    return " ".join(text.split()).strip()
-
-
-def _normalized_prefix_length(text: str, normalized_len: int) -> int:
-    """Map normalized prefix length back to original text prefix length."""
-    if normalized_len <= 0:
-        return 0
-    normalized_count = 0
-    prefix_len = 0
-    in_space = False
-    for i, ch in enumerate(text):
-        prefix_len = i + 1
-        if ch.isspace():
-            if not in_space and normalized_count > 0:
-                normalized_count += 1
-            in_space = True
-        else:
-            normalized_count += 1
-            in_space = False
-        if normalized_count >= normalized_len:
-            break
-    return prefix_len
-
-
-def _extract_docling_metadata(metadata: dict) -> dict:
-    """Extract Docling-specific metadata from chunk metadata.
-
-    Returns a dict with:
-        - section_hierarchy: List of section headers
-        - element_type: Type of document element (paragraph, header, code, etc.)
-        - strategy: Chunking strategy used (Hierarchical or Hybrid)
-        - size: Character count
-        - page_number: Source page (if available)
-    """
-    result = {}
-
-    # Section hierarchy (Docling format)
-    if "section_hierarchy" in metadata:
-        result["section_hierarchy"] = metadata["section_hierarchy"]
-    # Legacy LangChain format fallback
-    elif any(f"Header {i}" in metadata for i in range(1, 4)):
-        headers = []
-        for i in range(1, 4):
-            key = f"Header {i}"
-            if key in metadata and metadata[key]:
-                headers.append(metadata[key])
-        if headers:
-            result["section_hierarchy"] = headers
-
-    # Element type
-    if "element_type" in metadata:
-        result["element_type"] = metadata["element_type"]
-
-    # Chunking strategy
-    if "strategy" in metadata:
-        result["strategy"] = metadata["strategy"]
-
-    # Size
-    if "size" in metadata:
-        result["size"] = metadata["size"]
-
-    # Page number (if available from Docling)
-    if "page_number" in metadata:
-        result["page_number"] = metadata["page_number"]
-    elif "page" in metadata:
-        result["page_number"] = metadata["page"]
-
-    return result
-
-
-def _contextualize_chunk(chunk_text: str, metadata: dict) -> str:
-    """Create contextualized text for embedding by prepending section context.
-
-    This mimics Docling's chunker.contextualize() method, which produces
-    metadata-enriched text suitable for embedding models.
-
-    Args:
-        chunk_text: The raw chunk text
-        metadata: Docling metadata extracted via _extract_docling_metadata
-
-    Returns:
-        Contextualized text with section headers prepended
-    """
-    context_parts = []
-
-    # Add section hierarchy as context
-    if "section_hierarchy" in metadata:
-        hierarchy = metadata["section_hierarchy"]
-        if hierarchy:
-            context_parts.append(" > ".join(hierarchy))
-
-    # Add element type indicator for non-paragraph content
-    element_type = metadata.get("element_type", "")
-    if element_type and element_type not in ("paragraph", "text", "merged"):
-        type_label = element_type.replace("_", " ").title()
-        context_parts.append(f"[{type_label}]")
-
-    if context_parts:
-        context_prefix = " | ".join(context_parts)
-        return f"{context_prefix}\n\n{chunk_text}"
-
-    return chunk_text
-
-
-def _format_element_type(element_type: str) -> tuple[str, str]:
-    """Format element type for display, returning (label, color).
-
-    Returns:
-        Tuple of (display_label, background_color)
-    """
-    type_styles = {
-        "paragraph": ("Para", "#e0e7ff"),
-        "text": ("Text", "#e0e7ff"),
-        "header_1": ("H1", "#fce7f3"),
-        "header_2": ("H2", "#fce7f3"),
-        "header_3": ("H3", "#fce7f3"),
-        "header_4": ("H4", "#fce7f3"),
-        "header_5": ("H5", "#fce7f3"),
-        "header_6": ("H6", "#fce7f3"),
-        "list_item": ("List", "#d1fae5"),
-        "code": ("Code", "#fef3c7"),
-        "table": ("Table", "#e0f2fe"),
-        "figure": ("Figure", "#f3e8ff"),
-        "merged": ("Merged", "#f1f5f9"),
-    }
-    if element_type in type_styles:
-        return type_styles[element_type]
-    return (element_type.replace("_", " ").title(), "#f1f5f9")
 
 
 def _get_parsed_text_key(doc_name: str, parsing_params: dict) -> str:
@@ -361,100 +218,20 @@ def render_chunks_step() -> None:
     st.markdown("### Generated Chunks")
     st.caption(f"Source: {doc_display_name} | Total characters: {len(source_text)}")
 
+    # Prepare chunk display data (includes overlap calculation)
+    chunk_display_data = prepare_chunk_display_data(
+        chunks=chunks,
+        source_text=source_text,
+        calculate_overlap=True,
+    )
+    
     # Calculate real stats based on generated chunks
     num_chunks = len(chunks)
     avg_size = int(sum(len(c.text) for c in chunks) / num_chunks) if num_chunks > 0 else 0
     
-    chunks_with_overlap = 0
-    total_overlap_len = 0
+    chunks_with_overlap = sum(1 for d in chunk_display_data if d["overlap_text"])
+    total_overlap_len = sum(len(d["overlap_text"]) for d in chunk_display_data)
     
-    sorted_chunks = sorted(chunks, key=lambda c: c.start_index)
-    chunk_display_data = []
-    
-    for i, chunk in enumerate(sorted_chunks):
-        overlap_text = ""
-        main_text = chunk.text
-        overlap_len = 0
-        
-        if i > 0:
-            prev_chunk = sorted_chunks[i - 1]
-            calc_overlap = prev_chunk.end_index - chunk.start_index
-            if calc_overlap > 0:
-                index_overlap_len = min(calc_overlap, len(chunk.text))
-            else:
-                index_overlap_len = 0
-
-            if index_overlap_len >= len(chunk.text):
-                index_overlap_len = 0
-
-            text_overlap_len = _find_text_overlap(prev_chunk.text, chunk.text)
-            source_overlap_text = ""
-            normalized_prefix_match = False
-            if index_overlap_len > 0:
-                source_overlap_text = source_text[
-                    chunk.start_index : chunk.start_index + index_overlap_len
-                ]
-                normalized_prefix_match = _normalize_whitespace(
-                    source_overlap_text
-                ) == _normalize_whitespace(chunk.text[:index_overlap_len])
-
-            use_index_overlap = index_overlap_len > 0 and (
-                prev_chunk.text.endswith(chunk.text[:index_overlap_len])
-                or normalized_prefix_match
-            )
-            overlap_len = index_overlap_len if use_index_overlap else text_overlap_len
-
-            if overlap_len > 0:
-                overlap_text = chunk.text[:overlap_len]
-                main_text = chunk.text[overlap_len:]
-                chunks_with_overlap += 1
-                total_overlap_len += overlap_len
-
-            if index_overlap_len > 0 and not use_index_overlap:
-                normalized_prev = _normalize_for_overlap(prev_chunk.text)
-                normalized_curr = _normalize_for_overlap(chunk.text)
-                normalized_overlap_len = _find_text_overlap(
-                    normalized_prev,
-                    normalized_curr,
-                )
-                if normalized_overlap_len > 0:
-                    normalized_mapped_len = _normalized_prefix_length(
-                        chunk.text, normalized_overlap_len
-                    )
-                    if normalized_mapped_len > overlap_len:
-                        overlap_len = normalized_mapped_len
-                        overlap_text = chunk.text[:overlap_len]
-                        main_text = chunk.text[overlap_len:]
-                        chunks_with_overlap += 1
-                        total_overlap_len += overlap_len
-            elif index_overlap_len == 0 and text_overlap_len == 0:
-                normalized_prev = _normalize_for_overlap(prev_chunk.text)
-                normalized_curr = _normalize_for_overlap(chunk.text)
-                normalized_overlap_len = _find_text_overlap(
-                    normalized_prev,
-                    normalized_curr,
-                )
-                if normalized_overlap_len > 0:
-                    normalized_mapped_len = _normalized_prefix_length(
-                        chunk.text, normalized_overlap_len
-                    )
-                    if 0 < normalized_mapped_len < len(chunk.text):
-                        overlap_len = normalized_mapped_len
-                        overlap_text = chunk.text[:overlap_len]
-                        main_text = chunk.text[overlap_len:]
-                        chunks_with_overlap += 1
-                        total_overlap_len += overlap_len
-        
-        docling_meta = _extract_docling_metadata(chunk.metadata)
-        chunk_display_data.append({
-            "chunk": chunk,
-            "overlap_text": overlap_text,
-            "main_text": main_text,
-            "len": len(chunk.text),
-            "docling_metadata": docling_meta,
-            "contextualized_text": _contextualize_chunk(chunk.text, docling_meta),
-        })
-
     avg_overlap_size = (
         int(total_overlap_len / chunks_with_overlap)
         if chunks_with_overlap > 0
@@ -489,171 +266,11 @@ def render_chunks_step() -> None:
             key="stat_overlap_sz",
         )
 
-    # Palette for chunk backgrounds (pastel colors)
-    colors = [
-        "#fef2f2", # Reddish
-        "#eff6ff", # Blueish
-        "#f0fdf4", # Greenish
-        "#faf5ff", # Purpleish
-        "#fffbeb", # Yellowish
-    ]
-
-    # Build continuous HTML with expandable chunks
-    chunks_html_parts = []
-    chunks_html_parts.append(
-        '<div style="font-family: -apple-system, BlinkMacSystemFont, '
-        'sans-serif; line-height: 1.6; color: #111;">'
-    )
-    # Add CSS for details/summary styling
-    chunks_html_parts.append('''
-        <style>
-            .chunk-details summary { cursor: pointer; list-style: none; }
-            .chunk-details summary::-webkit-details-marker { display: none; }
-            .chunk-details[open] .chunk-expand-icon { transform: rotate(180deg); }
-            .chunk-details .chunk-expand-icon {
-                transition: transform 0.15s ease;
-                display: inline-block;
-                color: #9ca3af;
-            }
-            .chunk-expanded-content {
-                margin-top: 8px;
-                padding-top: 8px;
-                border-top: 1px solid rgba(0,0,0,0.08);
-            }
-            .chunk-context-box {
-                background: #f8fafc;
-                border: 1px solid #e2e8f0;
-                border-radius: 6px;
-                padding: 10px;
-                font-family: monospace;
-                font-size: 0.8rem;
-                white-space: pre-wrap;
-                word-break: break-word;
-            }
-            .chunk-context-label {
-                font-size: 0.7rem;
-                color: #6b7280;
-                margin-bottom: 6px;
-                font-weight: 500;
-            }
-        </style>
-    ''')
-
-    for i, data in enumerate(chunk_display_data):
-        color_idx = i % len(colors)
-        bg_color = colors[color_idx]
-        meta = data["docling_metadata"]
-
-        # Calculate extra context (prefix added during contextualization)
-        chunk_text = data["chunk"].text
-        contextualized = data["contextualized_text"]
-        extra_context = ""
-        if contextualized != chunk_text and contextualized.endswith(chunk_text):
-            extra_context = contextualized[: len(contextualized) - len(chunk_text)].strip()
-
-        # Wrap each chunk in a details element for expand/collapse
-        chunks_html_parts.append(
-            f'<details class="chunk-details" style="background-color: {bg_color}; '
-            f'padding: 4px 12px; margin: 0; position: relative;">'
-        )
-
-        # Summary (always visible part - shows full chunk text)
-        chunks_html_parts.append('<summary style="outline: none; display: block;">')
-
-        # Metadata badges row (floating right)
-        chunks_html_parts.append(
-            '<span style="float: right; display: flex; gap: 4px; align-items: center;">'
-        )
-
-        # Page number badge (if available)
-        if "page_number" in meta:
-            chunks_html_parts.append(
-                f'<span style="background: #dbeafe; color: #1e40af; '
-                f'font-size: 0.65rem; padding: 1px 5px; border-radius: 8px; '
-                f'user-select: none;">p.{meta["page_number"]}</span>'
-            )
-
-        # Element type badge
-        if "element_type" in meta:
-            type_label, type_color = _format_element_type(meta["element_type"])
-            chunks_html_parts.append(
-                f'<span style="background: {type_color}; color: #374151; '
-                f'font-size: 0.65rem; padding: 1px 5px; border-radius: 8px; '
-                f'user-select: none;">{type_label}</span>'
-            )
-
-        # Char count badge
-        chunks_html_parts.append(
-            f'<span style="background: rgba(0,0,0,0.1); '
-            f'color: #555; font-size: 0.65rem; padding: 1px 5px; '
-            f'border-radius: 8px; user-select: none;">'
-            f'{data["len"]} chars</span>'
-        )
-
-        chunks_html_parts.append('</span>')
-
-        # Section hierarchy breadcrumb (when available)
-        if "section_hierarchy" in meta and meta["section_hierarchy"]:
-            hierarchy = meta["section_hierarchy"]
-            breadcrumb = " > ".join(html.escape(h) for h in hierarchy)
-            chunks_html_parts.append(
-                f'<div style="font-size: 0.75rem; color: #6b7280; '
-                f'margin-bottom: 4px; font-weight: 500;">{breadcrumb}</div>'
-            )
-
-        # Render overlap text inline with dashed box style
-        if data["overlap_text"]:
-            chunks_html_parts.append(
-                '<span style="display: inline-block; border: 1px dashed #f97316; '
-                'background-color: rgba(255, 247, 237, 0.8); color: #c2410c; '
-                'border-radius: 4px; padding: 0 4px; margin-right: 4px;">'
-            )
-            chunks_html_parts.append(
-                '<span style="user-select: none; margin-right: 2px; '
-                'font-weight: bold;">↪</span>'
-            )
-            chunks_html_parts.append(html.escape(data["overlap_text"]))
-            chunks_html_parts.append('</span>')
-
-        # Render full main text
-        chunks_html_parts.append(html.escape(data["main_text"]))
-
-        # Expand icon at bottom of chunk
-        chunks_html_parts.append(
-            '<div style="text-align: center; margin-top: 6px;">'
-            '<span class="chunk-expand-icon" style="font-size: 0.6rem;" '
-            'title="Click to show added context">▼</span></div>'
-        )
-
-        chunks_html_parts.append('</summary>')
-
-        # Expanded content (shows ONLY the extra context prefix)
-        chunks_html_parts.append('<div class="chunk-expanded-content">')
-
-        if extra_context:
-            chunks_html_parts.append(
-                '<div class="chunk-context-label">Added Context (prepended for embedding)</div>'
-            )
-            chunks_html_parts.append(
-                f'<div class="chunk-context-box">{html.escape(extra_context)}</div>'
-            )
-        else:
-            chunks_html_parts.append(
-                '<div style="font-size: 0.8rem; color: #9ca3af; font-style: italic;">'
-                'No extra context added to this chunk.</div>'
-            )
-
-        chunks_html_parts.append('</div>')  # End expanded content
-        chunks_html_parts.append('</details>')
-
-    chunks_html_parts.append('</div>')
-    chunks_html = "".join(chunks_html_parts)
-
-    if not chunks:
-        chunks_html = (
-            '<div style="color: #666; font-style: italic;">No chunks generated.</div>'
-        )
-
+    # Render chunks using the reusable component
     st.write("")
     with st.container(border=True):
-        st.markdown(chunks_html, unsafe_allow_html=True)
+        render_chunk_cards(
+            chunk_display_data=chunk_display_data,
+            show_overlap=True,
+            display_mode="continuous",
+        )

@@ -13,9 +13,11 @@ from rag_visualizer.services.storage import (
     save_session_state,
 )
 from rag_visualizer.services.vector_store import create_vector_store
-from rag_visualizer.ui.steps.chunks import (
+from rag_visualizer.ui.components.chunk_viewer import (
     _contextualize_chunk,
     _extract_docling_metadata,
+    prepare_chunk_display_data,
+    render_chunk_cards,
 )
 from rag_visualizer.utils.parsers import parse_document
 from rag_visualizer.utils.visualization import (
@@ -25,30 +27,6 @@ from rag_visualizer.utils.visualization import (
     find_outliers,
     reduce_dimensions,
 )
-
-
-def _extract_section_hierarchy(metadata: dict) -> list[str]:
-    """Extract section hierarchy from chunk metadata.
-
-    Supports both Docling format (section_hierarchy) and legacy LangChain format.
-
-    Returns:
-        List of section headers from outermost to innermost.
-    """
-    if not metadata:
-        return []
-
-    # Docling format
-    if "section_hierarchy" in metadata:
-        return metadata["section_hierarchy"]
-
-    # Legacy LangChain format fallback
-    headers = []
-    for i in range(1, 4):
-        key = f"Header {i}"
-        if key in metadata and metadata[key]:
-            headers.append(metadata[key])
-    return headers
 
 
 @st.cache_data(show_spinner="Generating embeddings...")
@@ -320,15 +298,51 @@ def render_embeddings_step() -> None:
         st.write("")
         st.markdown("##### Nearest Neighbors")
         if neighbors:
-            for i, res in enumerate(neighbors):
-                with st.container(border=True):
-                    st.markdown(f"**{i+1}. Score: {res.score:.4f}**")
-                    # Show section hierarchy breadcrumb if available
-                    section_hierarchy = _extract_section_hierarchy(res.metadata)
-                    if section_hierarchy:
-                        breadcrumb = " > ".join(section_hierarchy)
-                        st.caption(breadcrumb)
-                    st.caption(res.text)
+            # Convert search results to chunks for the viewer
+            from dataclasses import dataclass
+            
+            @dataclass
+            class ChunkAdapter:
+                """Adapter to make SearchResult compatible with chunk viewer."""
+                text: str
+                metadata: dict
+                start_index: int = 0
+                end_index: int = 0
+            
+            neighbor_chunks = [
+                ChunkAdapter(
+                    text=res.text,
+                    metadata=res.metadata,
+                    start_index=i,
+                    end_index=i,
+                )
+                for i, res in enumerate(neighbors)
+            ]
+            
+            # Prepare display data
+            neighbor_display_data = prepare_chunk_display_data(
+                chunks=neighbor_chunks,
+                source_text=None,
+                calculate_overlap=False,
+            )
+            
+            # Add similarity score as custom badge
+            custom_badges = [
+                {
+                    "label": "Score",
+                    "value": f"{res.score:.4f}",
+                    "color": "#d1fae5"  # Green tint for similarity
+                }
+                for res in neighbors
+            ]
+            
+            # Render using the reusable component in card mode
+            render_chunk_cards(
+                chunk_display_data=neighbor_display_data,
+                custom_badges=custom_badges,
+                show_overlap=False,
+                display_mode="card",
+            )
         else:
             st.info("Enter a query above to see the most similar chunks here.")
 
@@ -400,44 +414,30 @@ def render_embeddings_step() -> None:
             st.caption("These chunks are semantically distant from the rest. They may represent unique concepts, noise, or structural elements like headers.")
             
             if outliers:
-                for i, outlier_data in enumerate(outliers):
-                    chunk = outlier_data['chunk']
-                    section_hierarchy = _extract_section_hierarchy(chunk.metadata)
-                    
-                    with st.container(border=True):
-                        # Always visible: header row with key info
-                        col_o1, col_o2 = st.columns([3, 1])
-                        with col_o1:
-                            st.markdown(f"**Chunk #{outlier_data['index']}** · {len(chunk.text)} chars")
-                            # Show section hierarchy if available
-                            if section_hierarchy:
-                                breadcrumb = " > ".join(section_hierarchy)
-                                st.caption(f"📍 {breadcrumb}")
-                        with col_o2:
-                            st.markdown("**Avg. Similarity**")
-                            st.markdown(f"`{outlier_data['avg_similarity']:.3f}`")
-                        
-                        # Always visible: text preview
-                        st.caption(outlier_data['text_preview'])
-                        
-                        # Expandable: full text and contextualized version
-                        with st.expander("Show full content & context", expanded=False):
-                            st.markdown("**Full Text:**")
-                            st.text(chunk.text)
-                            
-                            # Calculate and show contextualized text (what gets embedded)
-                            docling_meta = _extract_docling_metadata(chunk.metadata)
-                            contextualized = _contextualize_chunk(chunk.text, docling_meta)
-                            
-                            # Show extra context if any was added
-                            if contextualized != chunk.text and contextualized.endswith(chunk.text):
-                                extra_context = contextualized[: len(contextualized) - len(chunk.text)].strip()
-                                st.write("")
-                                st.markdown("**Added Context (prepended for embedding):**")
-                                st.code(extra_context, language=None)
-                                st.caption("This enriched text is sent to the embedding model for better semantic retrieval.")
-                            else:
-                                st.write("")
-                                st.caption("No extra context added to this chunk.")
+                # Prepare data for chunk viewer component
+                outlier_chunks = [o['chunk'] for o in outliers]
+                outlier_display_data = prepare_chunk_display_data(
+                    chunks=outlier_chunks,
+                    source_text=None,
+                    calculate_overlap=False,
+                )
+                
+                # Add similarity score as custom badge
+                custom_badges = [
+                    {
+                        "label": "Sim",
+                        "value": f"{o['avg_similarity']:.3f}",
+                        "color": "#fef3c7"
+                    }
+                    for o in outliers
+                ]
+                
+                # Render using the reusable component in card mode
+                render_chunk_cards(
+                    chunk_display_data=outlier_display_data,
+                    custom_badges=custom_badges,
+                    show_overlap=False,
+                    display_mode="card",
+                )
             else:
                 st.info("No outliers detected.")
