@@ -22,6 +22,7 @@ METADATA_OPTIONS = {
     "Element Type": "element_type",
     "Token Count": "token_count",
     "Heading Text": "heading_text",
+    "Page Numbers": "page_no",
 }
 
 # Default metadata to include
@@ -91,6 +92,27 @@ def _extract_metadata_from_chunk(
                 # Get unique labels from doc items
                 labels = list(set(str(item.label) for item in meta.doc_items))
                 metadata["element_type"] = labels if len(labels) > 1 else labels[0] if labels else "text"
+
+    # Page numbers from provenance (often outside meta in Docling)
+    if "page_no" in include_metadata:
+        pages = set()
+        # Check native_chunk.prov directly (preferred in newer Docling)
+        if hasattr(native_chunk, "prov") and native_chunk.prov:
+            for p in native_chunk.prov:
+                if hasattr(p, "page_no"):
+                    pages.add(p.page_no)
+        
+        # Fallback to doc_items provenance if direct prov is empty/missing
+        if not pages and hasattr(native_chunk, "meta") and native_chunk.meta:
+            if hasattr(native_chunk.meta, "doc_items") and native_chunk.meta.doc_items:
+                for item in native_chunk.meta.doc_items:
+                    if hasattr(item, "prov") and item.prov:
+                        for p in item.prov:
+                            if hasattr(p, "page_no"):
+                                pages.add(p.page_no)
+        
+        if pages:
+            metadata["page_no"] = sorted(list(pages))
     
     # Token count
     if "token_count" in include_metadata:

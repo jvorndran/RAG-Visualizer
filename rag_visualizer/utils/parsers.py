@@ -68,6 +68,9 @@ def _get_docling_converter(
     enable_table_structure: bool,
     num_threads: int,
     device: str = "auto",
+    enable_table_merging: bool = True,
+    enable_table_reconstruction: bool = True,
+    use_native_description: bool = False,
 ) -> DocumentConverter:
     """Create a cached docling converter tuned for speed."""
     safe_threads = max(1, int(num_threads or 4))
@@ -81,17 +84,17 @@ def _get_docling_converter(
         do_table_structure=enable_table_structure,
         table_structure_options=cast(Any, TableStructureOptions)(
             enable_table_matching=True,
-            enable_table_merging=True,
+            enable_table_merging=enable_table_merging,
             enable_table_splitting=True,
-            enable_table_reconstruction=True,
+            enable_table_reconstruction=enable_table_reconstruction,
         ),
         # Disable non-essential outputs for speed
         generate_page_images=False,
         generate_table_images=False,
         generate_picture_images=False,
         generate_parsed_pages=False,
-        do_picture_classification=False,
-        do_picture_description=False,
+        do_picture_classification=use_native_description,
+        do_picture_description=use_native_description,
     )
 
     format_option = FormatOption(
@@ -125,6 +128,9 @@ def _get_docling_converter_with_images(
     enable_table_structure: bool,
     num_threads: int,
     device: str = "auto",
+    enable_table_merging: bool = True,
+    enable_table_reconstruction: bool = True,
+    use_native_description: bool = False,
 ) -> DocumentConverter:
     """Create a cached docling converter with image extraction enabled."""
     safe_threads = max(1, int(num_threads or 4))
@@ -138,17 +144,17 @@ def _get_docling_converter_with_images(
         do_table_structure=enable_table_structure,
         table_structure_options=cast(Any, TableStructureOptions)(
             enable_table_matching=True,
-            enable_table_merging=True,
+            enable_table_merging=enable_table_merging,
             enable_table_splitting=True,
-            enable_table_reconstruction=True,
+            enable_table_reconstruction=enable_table_reconstruction,
         ),
         # Enable image extraction
         generate_page_images=True,
         generate_table_images=False,
         generate_picture_images=True,
         generate_parsed_pages=False,
-        do_picture_classification=False,
-        do_picture_description=False,
+        do_picture_classification=use_native_description,
+        do_picture_description=use_native_description,
     )
 
     format_option = FormatOption(
@@ -264,8 +270,13 @@ def parse_pdf_docling(
     enable_table_structure = bool(params.get("docling_table_structure", True))
     num_threads = params.get("docling_threads") or os.cpu_count() or 4
     extract_images = bool(params.get("docling_extract_images", False))
+    use_native_description = bool(params.get("docling_use_native_description", False))
     device = params.get("docling_device", "auto")
     
+    # Advanced table options
+    enable_table_merging = bool(params.get("enable_table_merging", True))
+    enable_table_reconstruction = bool(params.get("enable_table_reconstruction", True))
+
     # Get output format (markdown, html, doctags, json)
     output_format = params.get("output_format", "markdown")
 
@@ -295,6 +306,9 @@ def parse_pdf_docling(
                     enable_table_structure=enable_table_structure,
                     num_threads=num_threads,
                     device=device,
+                    enable_table_merging=enable_table_merging,
+                    enable_table_reconstruction=enable_table_reconstruction,
+                    use_native_description=use_native_description,
                 )
             else:
                 converter = _get_docling_converter(
@@ -302,6 +316,9 @@ def parse_pdf_docling(
                     enable_table_structure=enable_table_structure,
                     num_threads=num_threads,
                     device=device,
+                    enable_table_merging=enable_table_merging,
+                    enable_table_reconstruction=enable_table_reconstruction,
+                    use_native_description=use_native_description,
                 )
 
             result = converter.convert(tmp_path)

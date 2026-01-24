@@ -98,6 +98,21 @@ def render_chunking_configuration() -> tuple[dict, dict, bool]:
         help="Increase on larger CPUs to process pages in parallel.",
     )
 
+    # Advanced Table Options
+    with st.expander("Advanced Table Options", expanded=False):
+        enable_table_merging = st.checkbox(
+            "Enable table merging",
+            value=current_parsing_params.get("enable_table_merging", True),
+            key="chunking_config_enable_table_merging",
+            help="Merges cells spanning multiple rows/cols.",
+        )
+        enable_table_reconstruction = st.checkbox(
+            "Enable table reconstruction",
+            value=current_parsing_params.get("enable_table_reconstruction", True),
+            key="chunking_config_enable_table_reconstruction",
+            help="Rebuilds broken table borders.",
+        )
+
     st.write("")
     st.markdown("**Content Filtering**")
 
@@ -171,13 +186,29 @@ def render_chunking_configuration() -> tuple[dict, dict, bool]:
     )
 
     docling_enable_captioning = False
+    docling_use_native_description = False
     if docling_extract_images:
-        docling_enable_captioning = st.checkbox(
-            "Caption images with LLM",
-            value=current_parsing_params.get("docling_enable_captioning", False),
-            key="chunking_config_docling_enable_captioning",
-            help="Generate searchable captions using configured LLM.",
+        # Determine initial strategy from params, defaulting to Native if none previously set
+        current_strategy = "Docling Native"
+        if current_parsing_params.get("docling_enable_captioning", False):
+            current_strategy = "LLM Captioning"
+
+        strategy_options = ["Docling Native", "LLM Captioning"]
+        try:
+            strategy_index = strategy_options.index(current_strategy)
+        except ValueError:
+            strategy_index = 0
+
+        description_strategy = st.radio(
+            "Description Strategy",
+            options=strategy_options,
+            index=strategy_index,
+            key="chunking_config_description_strategy",
+            help="Choose how to describe extracted images. Native uses Docling's local VLM (no API cost).",
         )
+
+        docling_use_native_description = description_strategy == "Docling Native"
+        docling_enable_captioning = description_strategy == "LLM Captioning"
 
         # Show warning if captioning enabled but no vision model configured
         if docling_enable_captioning:
@@ -205,9 +236,12 @@ def render_chunking_configuration() -> tuple[dict, dict, bool]:
         "docling_enable_ocr": docling_enable_ocr,
         "docling_table_structure": docling_table_structure,
         "docling_threads": docling_threads,
+        "enable_table_merging": enable_table_merging,
+        "enable_table_reconstruction": enable_table_reconstruction,
         "docling_filter_labels": docling_filter_labels,
         "docling_extract_images": docling_extract_images,
         "docling_enable_captioning": docling_enable_captioning,
+        "docling_use_native_description": docling_use_native_description,
         "max_characters": max_characters,
     }
 
