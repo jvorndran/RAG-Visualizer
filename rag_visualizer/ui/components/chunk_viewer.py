@@ -183,7 +183,8 @@ def prepare_chunk_display_data(
         calculate_overlap: Whether to calculate sequential overlap between chunks
 
     Returns:
-        List of dicts with keys: chunk, overlap_text, main_text, len, docling_metadata
+        List of dicts with keys: chunk, overlap_text, main_text, len,
+        docling_metadata, display_text, used_fallback, fallback_reason
     """
     if not chunks:
         return []
@@ -195,6 +196,9 @@ def prepare_chunk_display_data(
         overlap_text = ""
         main_text = chunk.text
         overlap_len = 0
+        display_text = chunk.text
+        used_fallback = False
+        fallback_reason = ""
 
         if calculate_overlap and i > 0 and source_text:
             prev_chunk = sorted_chunks[i - 1]
@@ -259,6 +263,27 @@ def prepare_chunk_display_data(
                         overlap_text = chunk.text[:overlap_len]
                         main_text = chunk.text[overlap_len:]
 
+        if source_text:
+            start_index = getattr(chunk, "start_index", None)
+            end_index = getattr(chunk, "end_index", None)
+            if (
+                isinstance(start_index, int)
+                and isinstance(end_index, int)
+                and 0 <= start_index < end_index <= len(source_text)
+            ):
+                source_slice = source_text[start_index:end_index]
+                if source_slice.strip():
+                    display_text = source_slice
+                else:
+                    used_fallback = True
+                    fallback_reason = "empty_source_slice"
+            else:
+                used_fallback = True
+                fallback_reason = "invalid_source_indices"
+        else:
+            used_fallback = True
+            fallback_reason = "missing_source_text"
+
         docling_meta = _extract_docling_metadata(chunk.metadata)
         chunk_display_data.append(
             {
@@ -267,6 +292,9 @@ def prepare_chunk_display_data(
                 "main_text": main_text,
                 "len": len(chunk.text),
                 "docling_metadata": docling_meta,
+                "display_text": display_text,
+                "used_fallback": used_fallback,
+                "fallback_reason": fallback_reason,
             }
         )
 
@@ -386,6 +414,9 @@ def render_chunk_cards(
 
     for i, data in enumerate(chunk_display_data):
         meta = data["docling_metadata"]
+        display_text = data.get("display_text", data["chunk"].text)
+        used_fallback = bool(data.get("used_fallback"))
+        fallback_reason = data.get("fallback_reason", "")
 
         # Style depends on display mode
         if display_mode == "card":
@@ -436,6 +467,23 @@ def render_chunk_cards(
                         f'user-select: none;">{html.escape(label)}: {html.escape(str(value))}</span>'
                     )
 
+        # Fallback badge when rendering from non-source text
+        if used_fallback:
+            fallback_titles = {
+                "empty_source_slice": "Source slice was empty",
+                "invalid_source_indices": "Source indices were invalid",
+                "missing_source_text": "Source text was unavailable",
+            }
+            fallback_title = fallback_titles.get(
+                fallback_reason, "Rendered using chunk text fallback"
+            )
+            chunks_html_parts.append(
+                '<span style="background: #fee2e2; color: #991b1b; '
+                'font-size: 0.65rem; padding: 1px 5px; border-radius: 8px; '
+                f'user-select: none;" title="{html.escape(fallback_title)}">'
+                "Fallback</span>"
+            )
+
         # Page number badge (if available)
         if "page_number" in meta:
             chunks_html_parts.append(
@@ -474,13 +522,20 @@ def render_chunk_cards(
 
         # Render rendered markdown in summary (Default View)
         try:
-            rendered_html = markdown.markdown(data["chunk"].text)
-            chunks_html_parts.append(
-                f'<div class="chunk-rendered">{rendered_html}</div>'
-            )
+            rendered_html = markdown.markdown(display_text)
+            render_failed = False
         except Exception:
             # Fallback to plain text if markdown fails
-            chunks_html_parts.append(html.escape(data["chunk"].text))
+            rendered_html = html.escape(display_text)
+            render_failed = True
+        if render_failed:
+            chunks_html_parts.append(
+                '<div style="font-size: 0.7rem; color: #b45309; margin-top: 4px;">'
+                "Rendered as plain text</div>"
+            )
+        chunks_html_parts.append(
+            f'<div class="chunk-rendered">{rendered_html}</div>'
+        )
 
         # Expand icon at bottom of chunk
         chunks_html_parts.append(
