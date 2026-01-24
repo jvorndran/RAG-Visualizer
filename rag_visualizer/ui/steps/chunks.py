@@ -28,21 +28,6 @@ def render_chunks_step() -> None:
         )
 
         st.write("")
-
-        # Custom styling for disabled button
-        if not has_changes:
-            st.markdown(
-                """
-                <style>
-                button[kind="primary"][disabled] {
-                    opacity: 0.4;
-                    cursor: not-allowed;
-                }
-                </style>
-                """,
-                unsafe_allow_html=True,
-            )
-
         if st.button(
             "Apply Configuration",
             type="primary",
@@ -146,7 +131,7 @@ def render_chunks_step() -> None:
                     try:
                         content = load_document(selected_doc)
                         if content:
-                            # Use current parsing params (from sidebar) for parsing
+                            # Use current parsing params for parsing
                             parsed_text, _, _ = parse_document(
                                 selected_doc, content, current_parsing_params
                             )

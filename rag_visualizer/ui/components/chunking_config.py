@@ -29,23 +29,6 @@ def render_chunking_configuration() -> tuple[dict, dict, bool]:
         "applied_chunking_params", current_chunking_params.copy()
     )
 
-    # Configuration status badge
-    has_changes = (
-        current_parsing_params != applied_parsing_params
-        or current_chunking_params != applied_chunking_params
-    )
-
-    status_badge_html = (
-        '<span style="background-color: #f59e0b; color: white; padding: 2px 8px; '
-        'border-radius: 4px; font-size: 12px; font-weight: 500;">Changes pending</span>'
-        if has_changes
-        else '<span style="background-color: #10b981; color: white; padding: 2px 8px; '
-        'border-radius: 4px; font-size: 12px; font-weight: 500;">Configuration applied</span>'
-    )
-
-    st.markdown(status_badge_html, unsafe_allow_html=True)
-    st.write("")
-
     # Output Format selector
     st.markdown("**Output Format**")
     format_display_map = {
@@ -384,10 +367,22 @@ def render_chunking_configuration() -> tuple[dict, dict, bool]:
         **splitter_params,
     }
 
-    # Recalculate has_changes based on new values
+    # Calculate has_changes based on actual widget values
     has_changes = (
         new_parsing_params != applied_parsing_params
         or new_chunking_params != applied_chunking_params
     )
+
+    # Show status badge at the end, after all widgets are rendered
+    st.write("")
+    st.divider()
+    status_badge_html = (
+        '<span style="background-color: #f59e0b; color: white; padding: 2px 8px; '
+        'border-radius: 4px; font-size: 12px; font-weight: 500;">Changes pending</span>'
+        if has_changes
+        else '<span style="background-color: #10b981; color: white; padding: 2px 8px; '
+        'border-radius: 4px; font-size: 12px; font-weight: 500;">Configuration applied</span>'
+    )
+    st.markdown(status_badge_html, unsafe_allow_html=True)
 
     return new_parsing_params, new_chunking_params, has_changes
