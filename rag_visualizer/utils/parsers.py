@@ -53,6 +53,18 @@ DOCLING_FORMAT_MAP = {
 }
 
 
+def _resolve_accelerator_device(device: str) -> AcceleratorDevice:
+    """Resolve a user-provided device string to a Docling AcceleratorDevice."""
+    normalized = (device or "auto").strip().lower()
+    device_map = {
+        "auto": AcceleratorDevice.AUTO,
+        "cpu": AcceleratorDevice.CPU,
+        "cuda": getattr(AcceleratorDevice, "CUDA", AcceleratorDevice.AUTO),
+        "mps": getattr(AcceleratorDevice, "MPS", AcceleratorDevice.AUTO),
+    }
+    return device_map.get(normalized, AcceleratorDevice.AUTO)
+
+
 @dataclass
 class ExtractedImage:
     """An image extracted from a document."""
@@ -78,15 +90,12 @@ def _get_docling_converter(
     pipeline_options = ThreadedPdfPipelineOptions(
         accelerator_options=AcceleratorOptions(
             num_threads=safe_threads,
-            device=AcceleratorDevice.AUTO,
+            device=_resolve_accelerator_device(device),
         ),
         do_ocr=enable_ocr,
         do_table_structure=enable_table_structure,
-        table_structure_options=cast(Any, TableStructureOptions)(
-            enable_table_matching=True,
-            enable_table_merging=enable_table_merging,
-            enable_table_splitting=True,
-            enable_table_reconstruction=enable_table_reconstruction,
+        table_structure_options=TableStructureOptions(
+            do_cell_matching=True,
         ),
         # Disable non-essential outputs for speed
         generate_page_images=False,
@@ -138,15 +147,12 @@ def _get_docling_converter_with_images(
     pipeline_options = ThreadedPdfPipelineOptions(
         accelerator_options=AcceleratorOptions(
             num_threads=safe_threads,
-            device=AcceleratorDevice.AUTO,
+            device=_resolve_accelerator_device(device),
         ),
         do_ocr=enable_ocr,
         do_table_structure=enable_table_structure,
-        table_structure_options=cast(Any, TableStructureOptions)(
-            enable_table_matching=True,
-            enable_table_merging=enable_table_merging,
-            enable_table_splitting=True,
-            enable_table_reconstruction=enable_table_reconstruction,
+        table_structure_options=TableStructureOptions(
+            do_cell_matching=True,
         ),
         # Enable image extraction
         generate_page_images=True,
@@ -299,30 +305,68 @@ def parse_pdf_docling(
             tmp_path = tmp.name
 
         try:
-            # Use image-enabled converter if image extraction is requested
-            if extract_images:
-                converter = _get_docling_converter_with_images(
-                    enable_ocr=enable_ocr,
-                    enable_table_structure=enable_table_structure,
-                    num_threads=num_threads,
-                    device=device,
-                    enable_table_merging=enable_table_merging,
-                    enable_table_reconstruction=enable_table_reconstruction,
-                    use_native_description=use_native_description,
-                )
-            else:
-                converter = _get_docling_converter(
-                    enable_ocr=enable_ocr,
-                    enable_table_structure=enable_table_structure,
-                    num_threads=num_threads,
-                    device=device,
-                    enable_table_merging=enable_table_merging,
-                    enable_table_reconstruction=enable_table_reconstruction,
-                    use_native_description=use_native_description,
-                )
+            def _convert_pdf_with_docling(
+                *,
+                enable_ocr_value: bool,
+                enable_table_structure_value: bool,
+                num_threads_value: int,
+                extract_images_value: bool,
+                enable_table_merging_value: bool,
+                enable_table_reconstruction_value: bool,
+                use_native_description_value: bool,
+            ) -> Any:
+                if extract_images_value:
+                    converter = _get_docling_converter_with_images(
+                        enable_ocr=enable_ocr_value,
+                        enable_table_structure=enable_table_structure_value,
+                        num_threads=num_threads_value,
+                        device=device,
+                        enable_table_merging=enable_table_merging_value,
+                        enable_table_reconstruction=enable_table_reconstruction_value,
+                        use_native_description=use_native_description_value,
+                    )
+                else:
+                    converter = _get_docling_converter(
+                        enable_ocr=enable_ocr_value,
+                        enable_table_structure=enable_table_structure_value,
+                        num_threads=num_threads_value,
+                        device=device,
+                        enable_table_merging=enable_table_merging_value,
+                        enable_table_reconstruction=enable_table_reconstruction_value,
+                        use_native_description=use_native_description_value,
+                    )
+                result = converter.convert(tmp_path)
+                return result.document
 
-            result = converter.convert(tmp_path)
-            doc = result.document
+            try:
+                doc = _convert_pdf_with_docling(
+                    enable_ocr_value=enable_ocr,
+                    enable_table_structure_value=enable_table_structure,
+                    num_threads_value=num_threads,
+                    extract_images_value=extract_images,
+                    enable_table_merging_value=enable_table_merging,
+                    enable_table_reconstruction_value=enable_table_reconstruction,
+                    use_native_description_value=use_native_description,
+                )
+            except Exception as primary_error:
+                # Retry with safe settings for more robust parsing.
+                try:
+                    doc = _convert_pdf_with_docling(
+                        enable_ocr_value=False,
+                        enable_table_structure_value=False,
+                        num_threads_value=1,
+                        extract_images_value=extract_images,
+                        enable_table_merging_value=False,
+                        enable_table_reconstruction_value=False,
+                        use_native_description_value=False,
+                    )
+                except Exception as safe_error:
+                    raise ValueError(
+                        "Failed to parse PDF with docling: "
+                        f"{str(primary_error)}. "
+                        "Retry with safe settings failed: "
+                        f"{str(safe_error)}."
+                    ) from safe_error
 
             # Export document in the specified format
             text = export_document(doc, output_format, filter_labels)

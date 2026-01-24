@@ -100,18 +100,9 @@ def render_chunking_configuration() -> tuple[dict, dict, bool]:
 
     # Advanced Table Options
     with st.expander("Advanced Table Options", expanded=False):
-        enable_table_merging = st.checkbox(
-            "Enable table merging",
-            value=current_parsing_params.get("enable_table_merging", True),
-            key="chunking_config_enable_table_merging",
-            help="Merges cells spanning multiple rows/cols.",
-        )
-        enable_table_reconstruction = st.checkbox(
-            "Enable table reconstruction",
-            value=current_parsing_params.get("enable_table_reconstruction", True),
-            key="chunking_config_enable_table_reconstruction",
-            help="Rebuilds broken table borders.",
-        )
+        st.info("Table merging and reconstruction are currently handled automatically by Docling's accurate mode.")
+        enable_table_merging = True
+        enable_table_reconstruction = True
 
     st.write("")
     st.markdown("**Content Filtering**")
