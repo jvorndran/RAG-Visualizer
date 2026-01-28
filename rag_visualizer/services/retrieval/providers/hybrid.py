@@ -168,6 +168,12 @@ class HybridRetriever(RetrieverProvider):
                 score += 1.0 / (rrf_k + sparse_ranks[idx])
             rrf_scores[idx] = score
 
+        # Normalize RRF scores to 0-1 range for comparability with cosine similarity
+        if rrf_scores:
+            rrf_score_list = list(rrf_scores.values())
+            normalized_scores = self._normalize_scores(rrf_score_list)
+            rrf_scores = dict(zip(rrf_scores.keys(), normalized_scores, strict=True))
+
         # Sort by RRF score and get top k
         sorted_indices = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)[
             :k
