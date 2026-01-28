@@ -9,8 +9,10 @@ import os
 from collections.abc import Generator
 from dataclasses import dataclass
 from io import BytesIO
+from pathlib import Path
 from typing import Any, cast
 
+from dotenv import load_dotenv
 from PIL import Image as PILImage
 
 # Lazy imports for LLM clients
@@ -260,14 +262,30 @@ def _generate_anthropic_stream(
 
 
 def get_api_key_from_env(provider: str) -> str | None:
-    """Get API key from environment variable for a provider."""
+    """Get API key from environment variable for a provider.
+
+    Loads from ~/.rag-visualizer/.env file first, then falls back to system environment.
+
+    Args:
+        provider: LLM provider name
+
+    Returns:
+        API key if found, None otherwise
+    """
     if provider not in LLM_PROVIDERS:
         return None
-    
+
     env_key = LLM_PROVIDERS[provider].get("env_key", "")
-    if env_key:
-        return os.environ.get(env_key)
-    return None
+    if not env_key:
+        return None
+
+    # Load from ~/.rag-visualizer/.env
+    dotenv_path = Path.home() / ".rag-visualizer" / ".env"
+    if dotenv_path.exists():
+        load_dotenv(dotenv_path, override=False)
+
+    # Check environment (includes .env variables now)
+    return os.environ.get(env_key)
 
 
 def list_providers() -> list[dict[str, Any]]:

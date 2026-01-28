@@ -50,15 +50,13 @@ if "session_restored" not in st.session_state:
             # Remove the embedder key - it will be recreated on-demand
             del emb_result["embedder"]
 
-    # Load LLM config
+    # Load LLM config (API keys are never loaded here - they come from .env)
     saved_llm_config = load_llm_config()
     if saved_llm_config:
         if "llm_provider" not in st.session_state:
             st.session_state.llm_provider = saved_llm_config.get("provider", "OpenAI")
         if "llm_model" not in st.session_state:
             st.session_state.llm_model = saved_llm_config.get("model", "")
-        if "llm_api_key" not in st.session_state:
-            st.session_state.llm_api_key = saved_llm_config.get("api_key", "")
         if "llm_base_url" not in st.session_state:
             st.session_state.llm_base_url = saved_llm_config.get("base_url", "")
         if "llm_temperature" not in st.session_state:
@@ -67,6 +65,10 @@ if "session_restored" not in st.session_state:
             st.session_state.llm_max_tokens = saved_llm_config.get("max_tokens", 1024)
         if "llm_system_prompt" not in st.session_state:
             st.session_state.llm_system_prompt = saved_llm_config.get("system_prompt", DEFAULT_SYSTEM_PROMPT)
+
+    # Initialize llm_api_key as empty (never stored, always loaded from .env)
+    if "llm_api_key" not in st.session_state:
+        st.session_state.llm_api_key = ""
 
     # Load RAG config (sidebar options)
     saved_rag_config = load_rag_config()

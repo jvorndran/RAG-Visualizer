@@ -62,6 +62,24 @@ rag-visualizer
 
 This opens the app in your browser at `http://localhost:8501`.
 
+### API Key Setup
+
+To use LLM features (query generation with OpenAI, Anthropic, etc.), configure your API keys:
+
+1. Run `rag-visualizer` once to create the configuration directory
+2. Navigate to `~/.rag-visualizer/` (or `%USERPROFILE%\.rag-visualizer\` on Windows)
+3. Edit the `.env` file and add your API key:
+   ```bash
+   # For OpenAI
+   OPENAI_API_KEY=sk-your-key-here
+
+   # For Anthropic
+   ANTHROPIC_API_KEY=sk-ant-your-key-here
+   ```
+4. Save the file and refresh the app
+
+**Note:** API keys are stored securely in `.env` and never saved to session files. For local models (Ollama, LM Studio), no API key is required.
+
 ### CLI Options
 
 ```bash

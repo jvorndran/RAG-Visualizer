@@ -32,7 +32,7 @@ def render_chunking_configuration() -> tuple[dict, dict, bool]:
     # Output Format selector
     st.markdown("**Output Format**")
     format_display_map = {
-        "Markdown (Recommended)": "markdown",
+        "Markdown": "markdown",
         "HTML": "html",
         "DocTags": "doctags",
         "JSON (Lossless)": "json",
@@ -42,7 +42,7 @@ def render_chunking_configuration() -> tuple[dict, dict, bool]:
 
     format_value_map = {v: k for k, v in format_display_map.items()}
     current_format_display = format_value_map.get(
-        current_output_format, "Markdown (Recommended)"
+        current_output_format, "Markdown"
     )
 
     # Sync widget state only if needed

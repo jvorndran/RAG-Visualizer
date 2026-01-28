@@ -415,22 +415,23 @@ def render_llm_sidebar() -> None:
     
     st.write("")
 
-    # API Key
+    # API Key status
     st.markdown("**API Key**")
     env_key = get_api_key_from_env(provider)
     if env_key:
-        st.success("✓ API key from environment")
+        st.success("✓ API key loaded")
         api_key = env_key
-        st.session_state.llm_api_key = ""  # Clear stored key if env var exists
     else:
-        api_key = ui.input(
-            default_value=st.session_state.llm_api_key,
-            placeholder=f"Enter your {provider} API key",
-            key="sidebar_api_key",
-            type="password"
-        )
-        st.session_state.llm_api_key = api_key
-    
+        if provider == "OpenAI-Compatible":
+            st.info("No API key required for most local models")
+            api_key = "not-needed"
+        else:
+            st.warning("⚠️ No API key found")
+            st.caption(f"Set `{LLM_PROVIDERS[provider]['env_key']}` in `.env` file")
+            api_key = ""
+
+    st.session_state.llm_api_key = ""  # Never store API keys in session state
+
     st.write("")
 
     # Base URL (for OpenAI-Compatible)
@@ -478,12 +479,12 @@ def render_llm_sidebar() -> None:
         config_data = {
             "provider": provider,
             "model": model,
-            "api_key": api_key if not env_key else "",  # Don't save if from env
             "base_url": base_url if provider == "OpenAI-Compatible" else None,
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
         save_llm_config(config_data)
+        st.success("✓ Configuration saved")
     
     # Validation status
     config = LLMConfig(

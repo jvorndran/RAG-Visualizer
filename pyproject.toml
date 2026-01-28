@@ -38,6 +38,7 @@ dependencies = [
     "streamlit-shadcn-ui>=0.1.18",
     "tiktoken>=0.5",
     "rank-bm25>=0.2.2",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]

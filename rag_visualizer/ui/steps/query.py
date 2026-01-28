@@ -3,6 +3,9 @@
 Allows users to test the full RAG pipeline with retrieval and LLM response generation.
 """
 
+import platform
+import subprocess
+from pathlib import Path
 from typing import Any
 
 import streamlit as st
@@ -15,10 +18,97 @@ from rag_visualizer.services.llm import (
     RAGContext,
     get_model,
 )
+from rag_visualizer.services.storage import get_storage_dir
 from rag_visualizer.ui.components.chunk_viewer import (
     prepare_chunk_display_data,
     render_chunk_cards,
 )
+
+
+def _open_folder_in_explorer(folder_path: Path) -> None:
+    """Open a folder in the system file explorer.
+
+    Args:
+        folder_path: Path to the folder to open
+    """
+    try:
+        system = platform.system()
+        if system == "Windows":
+            subprocess.run(["explorer", str(folder_path)], check=False)
+        elif system == "Darwin":  # macOS
+            subprocess.run(["open", str(folder_path)], check=False)
+        else:  # Linux
+            subprocess.run(["xdg-open", str(folder_path)], check=False)
+    except Exception:
+        pass  # Silently fail if we can't open the folder
+
+
+def _ensure_env_file_exists() -> Path:
+    """Ensure the .env file exists in the storage directory with helpful template.
+
+    Returns:
+        Path to the .env file
+    """
+    env_path = get_storage_dir() / ".env"
+
+    if not env_path.exists():
+        template = """# RAG Visualizer API Keys
+# Set your API keys below (uncomment and add your keys)
+
+# OpenAI API Key
+# OPENAI_API_KEY=sk-your-key-here
+
+# Anthropic API Key
+# ANTHROPIC_API_KEY=sk-ant-your-key-here
+
+# For local models (Ollama, LM Studio), no API key is usually needed
+"""
+        get_storage_dir().mkdir(parents=True, exist_ok=True)
+        env_path.write_text(template)
+
+    return env_path
+
+
+def _render_api_key_setup_message(provider: str, env_key_name: str) -> None:
+    """Render a helpful message when API key is not configured.
+
+    Args:
+        provider: LLM provider name
+        env_key_name: Environment variable name for the API key
+    """
+    with st.container(border=True):
+        st.markdown("### API Key Required")
+        st.markdown(
+            f"To use **{provider}** for answer generation, you need to configure your API key."
+        )
+
+        st.write("")
+        st.markdown("**Setup Steps:**")
+        st.markdown(
+            f"""
+            1. Click the button below to open the configuration folder
+            2. Edit the `.env` file in a text editor
+            3. Add your API key: `{env_key_name}=your-key-here`
+            4. Save the file and refresh this page
+            """
+        )
+
+        st.write("")
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            if ui.button(
+                "Open Config Folder",
+                variant="primary",
+                key="open_config_folder_btn"
+            ):
+                _ensure_env_file_exists()
+                _open_folder_in_explorer(get_storage_dir())
+                st.success("✓ Folder opened! Edit the .env file and refresh.")
+
+        with col2:
+            st.caption(
+                f"The folder contains a `.env` file where you can securely store your {provider} API key."
+            )
 
 
 def _get_embeddings_data() -> dict[str, Any] | None:
@@ -160,7 +250,24 @@ def render_query_step() -> None:
     # === Header & Metrics ===
     st.subheader("Query & Retrieval")
     st.caption("Test your RAG pipeline with real-time retrieval and generation.")
-    
+
+    st.write("")
+
+    # === Check API Key Configuration ===
+    provider = st.session_state.get("llm_provider", "OpenAI")
+    from rag_visualizer.services.llm import LLM_PROVIDERS, get_api_key_from_env
+
+    # Check if API key is configured (skip check for OpenAI-Compatible)
+    if provider != "OpenAI-Compatible":
+        env_key_name = LLM_PROVIDERS[provider].get("env_key", "")
+        api_key = get_api_key_from_env(provider)
+
+        if not api_key:
+            _render_api_key_setup_message(provider, env_key_name)
+            return
+
+    st.write("")
+
     cols = st.columns(3)
     with cols[0]:
         ui.metric_card(

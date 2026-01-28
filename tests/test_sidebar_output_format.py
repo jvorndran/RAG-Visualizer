@@ -45,7 +45,7 @@ class TestOutputFormatDropdownDisplay:
             output_format_selectbox = at.selectbox(key="sidebar_output_format")
             options = output_format_selectbox.options
 
-            assert "Markdown (Recommended)" in options
+            assert "Markdown" in options
             assert "Original Format" in options
             assert "Plain Text" in options
             assert len(options) == 3
@@ -60,8 +60,7 @@ class TestOutputFormatDropdownDisplay:
             at = AppTest.from_string(sidebar_app_script).run()
 
             output_format_selectbox = at.selectbox(key="sidebar_output_format")
-            assert output_format_selectbox.value == "Markdown (Recommended)"
-
+            assert output_format_selectbox.value == "Markdown"
 
 class TestOutputFormatSessionState:
     """Tests for output format session state behavior."""
@@ -76,7 +75,7 @@ class TestOutputFormatSessionState:
             at = AppTest.from_string(sidebar_app_script).run()
 
             assert "sidebar_output_format" in at.session_state
-            assert at.session_state["sidebar_output_format"] == "Markdown (Recommended)"
+            assert at.session_state["sidebar_output_format"] == "Markdown"
 
     def test_parsing_params_has_output_format(
         self, mock_storage_dir, sidebar_app_script
@@ -256,7 +255,7 @@ class TestOutputFormatCycling:
             at = AppTest.from_string(sidebar_app_script).run()
 
             # Start at markdown
-            assert at.selectbox(key="sidebar_output_format").value == "Markdown (Recommended)"
+            assert at.selectbox(key="sidebar_output_format").value == "Markdown"
             assert at.session_state["parsing_params"]["output_format"] == "markdown"
 
             # Change to Original Format and submit
@@ -274,8 +273,8 @@ class TestOutputFormatCycling:
             assert at.session_state["parsing_params"]["output_format"] == "plain_text"
 
             # Change back to Markdown and submit
-            at.selectbox(key="sidebar_output_format").set_value("Markdown (Recommended)")
+            at.selectbox(key="sidebar_output_format").set_value("Markdown")
             submit_btn = get_form_submit_button(at)
             submit_btn.click().run()
-            assert at.selectbox(key="sidebar_output_format").value == "Markdown (Recommended)"
+            assert at.selectbox(key="sidebar_output_format").value == "Markdown"
             assert at.session_state["parsing_params"]["output_format"] == "markdown"

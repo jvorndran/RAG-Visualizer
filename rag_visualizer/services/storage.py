@@ -53,6 +53,7 @@ def ensure_storage_dir() -> Path:
 
     Creates the following structure:
         ~/.rag-visualizer/
+        ├── .env           # API keys configuration
         ├── documents/     # Uploaded raw documents
         ├── chunks/        # Processed chunk data
         ├── embeddings/    # Cached embeddings
@@ -67,6 +68,23 @@ def ensure_storage_dir() -> Path:
     subdirs = ["documents", "chunks", "embeddings", "indices"]
     for subdir in subdirs:
         (storage_dir / subdir).mkdir(parents=True, exist_ok=True)
+
+    # Create .env template if it doesn't exist
+    env_file = storage_dir / ".env"
+    if not env_file.exists():
+        env_template = """# RAG Visualizer - API Keys Configuration
+#
+# Add your API keys below by uncommenting the relevant line and adding your key.
+
+# OpenAI API Key (for GPT models)
+# OPENAI_API_KEY=sk-...
+
+# Anthropic API Key (for Claude models)
+# ANTHROPIC_API_KEY=sk-ant-...
+
+# For local models (Ollama, LM Studio, etc.), no API key is usually needed
+"""
+        env_file.write_text(env_template)
 
     return storage_dir
 
@@ -499,43 +517,50 @@ LLM_CONFIG_FILE = "llm_config.json"
 
 def save_llm_config(config_data: dict[str, Any]) -> None:
     """Save LLM configuration to disk for persistence across sessions.
-    
+
     Args:
         config_data: Dictionary containing LLM config to persist.
-                    Should include: provider, model, api_key, base_url (optional),
+                    Should include: provider, model, base_url (optional),
                     temperature, max_tokens, system_prompt (optional)
+
+    Note:
+        API keys are NEVER saved to this file. They must be set in the
+        ~/.rag-visualizer/.env file using environment variable names like
+        OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.
     """
     ensure_storage_dir()
     config_dir = get_storage_dir() / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Obfuscate API key for storage (store last 4 chars only for display)
+
+    # Remove API key from config if present (security measure)
     safe_config = config_data.copy()
-    if "api_key" in safe_config and safe_config["api_key"]:
-        api_key = safe_config["api_key"]
-        # Store full key but mark it as stored
-        # In a real app, you'd encrypt this, but for simplicity we'll store it
-        # Users should be aware this is stored in plaintext
-        safe_config["api_key_stored"] = True
-        safe_config["api_key"] = api_key  # Store full key for now
-    
+    safe_config.pop("api_key", None)
+
     (config_dir / LLM_CONFIG_FILE).write_text(json.dumps(safe_config, indent=2))
 
 
 def load_llm_config() -> dict[str, Any] | None:
     """Load persisted LLM configuration from disk.
-    
+
     Returns:
         Dictionary with restored config data, or None if no saved config exists
+
+    Note:
+        API keys are never loaded from this file. They are always loaded from
+        environment variables via the .env file.
     """
     config_dir = get_storage_dir() / "config"
     config_file = config_dir / LLM_CONFIG_FILE
-    
+
     if not config_file.exists():
         return None
-    
+
     try:
-        return cast(dict[str, Any], json.loads(config_file.read_text()))
+        config = cast(dict[str, Any], json.loads(config_file.read_text()))
+        # Remove any API keys that might have been saved in older versions
+        config.pop("api_key", None)
+        config.pop("api_key_stored", None)
+        return config
     except (OSError, json.JSONDecodeError):
         return None
 
