@@ -27,6 +27,7 @@ from rag_visualizer.utils.visualization import (
     create_similarity_histogram,
     find_outliers,
     reduce_dimensions,
+    cluster_embeddings,
 )
 
 
@@ -146,6 +147,29 @@ def render_embeddings_step() -> None:
     # 2. Embedding Generation (if needed)
     current_state_key = f"embeddings_{len(chunks)}_{selected_model}_{doc_name}"
     
+    # Initialize or recover state structure if it's old version
+    if "last_embeddings_result" in st.session_state:
+        state_data = st.session_state["last_embeddings_result"]
+        # Migration: Add projections dict if missing
+        if "projections" not in state_data:
+            # If we have legacy reduced_embeddings, move it to projections[2]
+            if "reduced_embeddings" in state_data:
+                state_data["projections"] = {
+                    2: (state_data["reduced_embeddings"], state_data["reducer"])
+                }
+                # Clean up legacy keys
+                del state_data["reduced_embeddings"]
+                del state_data["reducer"]
+            else:
+                 state_data["projections"] = {}
+        
+        # Migration: Clean up any old embedder objects
+        if "embedder" in state_data:
+            del state_data["embedder"]
+            
+        st.session_state["last_embeddings_result"] = state_data
+
+    # Generate if key changed or not present
     if "last_embeddings_result" not in st.session_state or \
        st.session_state["last_embeddings_result"].get("key") != current_state_key:
         
@@ -157,17 +181,18 @@ def render_embeddings_step() -> None:
                 vector_store = create_vector_store(dimension=dimension)
                 vector_store.add(embeddings, texts, metadata=[c.metadata for c in chunks])
 
-                reduced_embeddings, reducer = reduce_dimensions(embeddings)
+                # Initial 2D projection - just to have it, though we will default to 3D now
+                reduced_embeddings, reducer = reduce_dimensions(embeddings, n_components=3)
 
                 st.session_state["last_embeddings_result"] = {
                     "key": current_state_key,
                     "vector_store": vector_store,
-                    "reduced_embeddings": reduced_embeddings,
-                    "reducer": reducer,
+                    "embeddings": embeddings, # Keep original embeddings for re-projection
+                    "projections": {
+                        3: (reduced_embeddings, reducer)
+                    },
                     "chunks": chunks,
                     "model": selected_model,
-                    # Don't store embedder - PyTorch models aren't serializable
-                    # It will be recreated on-demand from the model name
                 }
 
                 # Build BM25 index if needed for sparse/hybrid retrieval
@@ -202,26 +227,15 @@ def render_embeddings_step() -> None:
                 st.error(f"Error: {str(e)}")
                 return
 
-    # Migration: Clean up any old embedder objects (fix for meta tensor error)
-    if "embedder" in st.session_state["last_embeddings_result"]:
-        del st.session_state["last_embeddings_result"]["embedder"]
-
     # Load data from state
     state_data = st.session_state["last_embeddings_result"]
     vector_store = state_data["vector_store"]
-    reduced_embeddings = state_data["reduced_embeddings"]
-    reducer = state_data["reducer"]
     model_name = state_data.get("model", selected_model)
-
-    # Restore a usable reducer when session state was loaded from disk
-    # (UMAP reducers are not serialized, so query projection would fail).
-    if reducer is None:
-        vectors = vector_store.get_all_embeddings()
-        if vectors.size:
-            reduced_embeddings, reducer = reduce_dimensions(vectors)
-            state_data["reduced_embeddings"] = reduced_embeddings
-            state_data["reducer"] = reducer
-            st.session_state["last_embeddings_result"] = state_data
+    
+    # Ensure raw embeddings are available (might be missing if loaded from disk/legacy)
+    if "embeddings" not in state_data:
+        state_data["embeddings"] = vector_store.get_all_embeddings()
+        st.session_state["last_embeddings_result"] = state_data
 
     # Recreate embedder on-demand (lightweight - model loads lazily)
     embedder = get_embedder(model_name)
@@ -240,6 +254,31 @@ def render_embeddings_step() -> None:
 
     # --- TAB 1: Visual Explorer ---
     if active_tab == "Visual Explorer":
+        
+        # 3. Logic & Calculation
+        # Enforce 3D mode
+        n_components = 3
+        
+        # Ensure projection exists for selected mode
+        if n_components not in state_data["projections"]:
+            with st.spinner(f"Calculating 3D projection..."):
+                reduced, reducer = reduce_dimensions(state_data["embeddings"], n_components=n_components)
+                state_data["projections"][n_components] = (reduced, reducer)
+                st.session_state["last_embeddings_result"] = state_data # Update session state
+        
+        reduced_embeddings, reducer = state_data["projections"][n_components]
+
+        # Calculate Clusters
+        if "cluster_labels" not in state_data:
+            with st.spinner("Analyzing semantic clusters..."):
+                # Determine optimal clusters - simple heuristic: sqrt(N/2) capped at 10
+                n_clusters = min(10, max(2, int(np.sqrt(len(chunks) / 2))))
+                labels = cluster_embeddings(state_data["embeddings"], n_clusters=n_clusters)
+                state_data["cluster_labels"] = labels
+                st.session_state["last_embeddings_result"] = state_data
+        
+        cluster_labels = state_data["cluster_labels"]
+
         # Query Interface
         st.write("")
         st.markdown("#### Semantic Search")
@@ -271,48 +310,50 @@ def render_embeddings_step() -> None:
                 query_embedding = embedder.embed_query(query_text)
                 search_results = vector_store.search(query_embedding, k=5)
                 
-                # Project Query to 2D
-                query_point_2d = None
-                if reducer is not None:
-                    query_reshaped = query_embedding.reshape(1, -1)
-                    try:
-                        query_2d = reducer.transform(query_reshaped)
-                        query_point_2d = {"x": query_2d[0][0], "y": query_2d[0][1]}
-                    except Exception:
-                        st.warning("Could not project query point.")
-
                 st.session_state.search_results = {
                     "query": query_text,
                     "embedding": query_embedding,
                     "neighbors": search_results,
-                    "query_point_2d": query_point_2d
                 }
 
         # Retrieve results
         results = st.session_state.search_results
-        query_point_2d = results.get("query_point_2d") if results else None
+        query_embedding = results.get("embedding") if results else None
         neighbors = results.get("neighbors", []) if results else []
         neighbor_indices = [r.index for r in neighbors]
-
-        # Visualization Section
-        help_text = "Points: Each dot is a chunk. Proximity = Similarity. Pink Star = Query."
         
-        st.write("")
+        # Project Query Point (Dynamic based on current reducer)
+        query_point_viz = None
+        if query_embedding is not None and reducer is not None:
+             query_reshaped = query_embedding.reshape(1, -1)
+             try:
+                 query_proj = reducer.transform(query_reshaped)
+                 # Enforce 3D logic
+                 query_point_viz = {"x": query_proj[0][0], "y": query_proj[0][1], "z": query_proj[0][2]}
+             except Exception:
+                 st.warning("Could not project query point.")
+
+        # 4. Render Chart (Visual Location: Below Search)
         with st.container(border=True):
-            st.markdown("##### Embedding Space (UMAP Projection)", help=help_text)
+            help_text = "Points: Each dot is a chunk. Colors represent semantic clusters. Pink Star = Query."
+            st.markdown(f"##### Embedding Space (3D UMAP)", help=help_text)
             
             # Prepare Data for Plotly
-            df = pd.DataFrame(reduced_embeddings, columns=["x", "y"])
+            df = pd.DataFrame(reduced_embeddings, columns=["x", "y", "z"])
             df["text_preview"] = [c.text[:150] + "..." for c in chunks]
             df["chunk_index"] = range(len(chunks))
+            df["cluster_label"] = cluster_labels  # Numeric for color
+            df["Cluster"] = [f"Cluster {l}" for l in cluster_labels] # String for hover
             
             fig = create_embedding_plot(
                 df,
                 x_col="x",
                 y_col="y",
-                hover_data=["text_preview"],
+                z_col="z",
+                color_col="cluster_label",
+                hover_data=["text_preview", "Cluster"],
                 title="",
-                query_point=query_point_2d,
+                query_point=query_point_viz,
                 neighbors_indices=neighbor_indices
             )
             st.plotly_chart(fig, width='stretch')
