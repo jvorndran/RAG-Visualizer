@@ -1,6 +1,7 @@
 """Reranking module using FlashRank cross-encoders."""
 
 from dataclasses import dataclass
+from inspect import signature
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -18,6 +19,23 @@ def _get_ranker() -> Any:
 
         _Ranker = Ranker
     return _Ranker
+
+
+def _call_ranker_rerank_compat(
+    ranker: Any,
+    query: str,
+    passages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Handle both old and new FlashRank rerank() signatures."""
+    params = list(signature(type(ranker).rerank).parameters)
+
+    if len(params) == 2:
+        from flashrank import RerankRequest
+
+        request = RerankRequest(query=query, passages=passages)
+        return ranker.rerank(request)
+
+    return ranker.rerank(query, passages)
 
 
 @dataclass
@@ -56,7 +74,7 @@ def rerank_results(
     passages = [{"id": i, "text": r.text} for i, r in enumerate(results)]
 
     # Rerank
-    reranked = ranker.rerank(query, passages)
+    reranked = _call_ranker_rerank_compat(ranker, query, passages)
 
     # Map back to SearchResults with new scores
     reranked_results = []

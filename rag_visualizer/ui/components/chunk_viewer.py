@@ -288,7 +288,7 @@ def prepare_chunk_display_data(
 
 def render_chunk_cards(
     chunk_display_data: list[dict[str, Any]],
-    custom_badges: list[dict[str, Any]] | None = None,
+    custom_badges: list[list[dict[str, Any]] | dict[str, Any]] | None = None,
     show_overlap: bool = True,
     display_mode: str = "continuous",
     render_format: str = "markdown",
@@ -297,8 +297,9 @@ def render_chunk_cards(
 
     Args:
         chunk_display_data: List of dicts from prepare_chunk_display_data()
-        custom_badges: Optional list of dicts with custom badge info per chunk.
-                      Each dict can have keys like {"label": "Score", "value": "0.85", "color": "#..."}
+        custom_badges: Optional list of badges per chunk.
+                      Can be a list of single badges (dict) or a list of lists of badges.
+                      Each badge dict keys: {"label": "Score", "value": "0.85", "color": "#..."}
         show_overlap: Whether to render overlap highlighting (default: True)
         display_mode: Display style - "continuous" (colored flow) or "card" (individual cards with borders)
         render_format: Chunk render format (markdown, html, doctags, json)
@@ -472,17 +473,26 @@ def render_chunk_cards(
 
         # Custom badges (e.g., similarity score)
         if custom_badges and i < len(custom_badges):
-            badge_info = custom_badges[i]
-            if badge_info:
-                label = badge_info.get("label", "")
-                value = badge_info.get("value", "")
-                badge_color = badge_info.get("color", "#e0e7ff")
-                if label and value:
-                    chunks_html_parts.append(
-                        f'<span style="background: {badge_color}; color: #374151; '
-                        f'font-size: 0.65rem; padding: 1px 5px; border-radius: 8px; '
-                        f'user-select: none;">{html.escape(label)}: {html.escape(str(value))}</span>'
-                    )
+            badge_entry = custom_badges[i]
+            
+            # Normalize to list of badges
+            badges_list = []
+            if isinstance(badge_entry, list):
+                badges_list = badge_entry
+            elif isinstance(badge_entry, dict) and badge_entry:
+                badges_list = [badge_entry]
+            
+            for badge_info in badges_list:
+                if badge_info:
+                    label = badge_info.get("label", "")
+                    value = badge_info.get("value", "")
+                    badge_color = badge_info.get("color", "#e0e7ff")
+                    if label and value:
+                        chunks_html_parts.append(
+                            f'<span style="background: {badge_color}; color: #374151; '
+                            f'font-size: 0.65rem; padding: 1px 5px; border-radius: 8px; '
+                            f'user-select: none;">{html.escape(label)}: {html.escape(str(value))}</span>'
+                        )
 
         # Fallback badge when rendering from non-source text
         if used_fallback:

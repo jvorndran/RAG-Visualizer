@@ -11,6 +11,11 @@ from rag_visualizer.services.embedders import (
     DEFAULT_MODEL,
     get_embedder,
 )
+from rag_visualizer.services.retrieval import retrieve
+from rag_visualizer.services.retrieval import (
+    preprocess_retriever,
+    retrieve,
+)
 from rag_visualizer.services.storage import (
     load_document,
     save_session_state,
@@ -240,15 +245,6 @@ def render_embeddings_step() -> None:
     # Recreate embedder on-demand (lightweight - model loads lazily)
     embedder = get_embedder(model_name)
 
-    # 3. KPIs / Top Metrics
-    col_kpi1, col_kpi2 = st.columns(2)
-    with col_kpi1:
-        ui.metric_card(title="Total Chunks", content=len(chunks), key="metric_total_chunks")
-    with col_kpi2:
-        ui.metric_card(title="Vector Dimension", content=getattr(embedder, "dimension", "N/A"), key="metric_vec_dim")
-
-    st.write("") # Spacer
-
     # 4. Tabs for Content Organization
     active_tab = ui.tabs(options=["Visual Explorer", "Vector Analysis"], default_value="Visual Explorer", key="embed_main_tabs")
 
@@ -308,8 +304,45 @@ def render_embeddings_step() -> None:
             with st.spinner("Calculating similarity..."):
                 # Embedder is already created above - no fallback needed
                 query_embedding = embedder.embed_query(query_text)
-                search_results = vector_store.search(query_embedding, k=5)
-                
+
+                retrieval_config = st.session_state.get("retrieval_config")
+                if not retrieval_config or not isinstance(retrieval_config, dict):
+                    retrieval_config = {"strategy": "DenseRetriever", "params": {}}
+
+                strategy = retrieval_config.get("strategy", "DenseRetriever")
+                params = retrieval_config.get("params", {})
+
+                # Ensure BM25 data exists if needed
+                if strategy in ("SparseRetriever", "HybridRetriever"):
+                    bm25_data = st.session_state.get("bm25_index_data")
+                    if not bm25_data:
+                        try:
+                            bm25_data = preprocess_retriever(
+                                "SparseRetriever",
+                                vector_store,
+                                **params,
+                            )
+                            st.session_state["bm25_index_data"] = bm25_data
+                        except Exception as preprocess_err:
+                            st.warning(
+                                f"Failed to build BM25 index for retrieval: {preprocess_err}"
+                            )
+                    if bm25_data:
+                        params = {**params, "bm25_index_data": bm25_data}
+
+                try:
+                    search_results = retrieve(
+                        query=query_text,
+                        vector_store=vector_store,
+                        embedder=embedder,
+                        retriever_name=strategy,
+                        k=5,
+                        **params,
+                    )
+                except Exception as err:
+                    st.error(f"Retrieval failed: {err}")
+                    search_results = []
+
                 st.session_state.search_results = {
                     "query": query_text,
                     "embedding": query_embedding,
@@ -390,15 +423,34 @@ def render_embeddings_step() -> None:
                 calculate_overlap=False,
             )
             
-            # Add similarity score as custom badge
-            custom_badges = [
-                {
+            # Add similarity score and strategy-specific badges
+            custom_badges = []
+            for res in neighbors:
+                badges = []
+                # Main Score
+                badges.append({
                     "label": "Score",
                     "value": f"{res.score:.4f}",
                     "color": "#d1fae5"  # Green tint for similarity
-                }
-                for res in neighbors
-            ]
+                })
+                
+                dense_rrf_contribution = res.metadata.get("dense_rrf_contribution")
+                if dense_rrf_contribution is not None:
+                    badges.append({
+                        "label": "Dense Contribution",
+                        "value": f"{dense_rrf_contribution:.4f}",
+                        "color": "#93c5fd"
+                    })
+
+                sparse_rrf_contribution = res.metadata.get("sparse_rrf_contribution")
+                if sparse_rrf_contribution is not None:
+                    badges.append({
+                        "label": "Sparse Contribution",
+                        "value": f"{sparse_rrf_contribution:.4f}",
+                        "color": "#fecdd3"
+                    })
+
+                custom_badges.append(badges)
             
             # Render using the reusable component in card mode
             render_chunk_cards(

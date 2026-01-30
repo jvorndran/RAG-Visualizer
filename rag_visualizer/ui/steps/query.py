@@ -168,19 +168,42 @@ def _render_retrieved_chunks(
         source_text=None,
         calculate_overlap=False,
     )
-    
-    # Add similarity score as custom badge if requested
-    custom_badges: list[dict[str, Any]] | None = None
+
+    custom_badges: list[list[dict[str, Any]]] | None = None
     if show_scores:
-        custom_badges = [
-            {
-                "label": "Score",
-                "value": f"{res.score:.3f}",
-                "color": "#d1fae5"  # Green tint for similarity
-            }
-            for res in results
-        ]
-    
+        custom_badges = []
+        for res in results:
+            base_score = res.metadata.get("original_score", res.score)
+            badges: list[dict[str, Any]] = [
+                {
+                    "label": "Score",
+                    "value": f"{base_score:.4f}",
+                    "color": "#d1fae5",
+                }
+            ]
+
+            dense_rrf_contribution = res.metadata.get("dense_rrf_contribution")
+            if dense_rrf_contribution is not None:
+                badges.append(
+                    {
+                        "label": "Dense Contribution",
+                        "value": f"{dense_rrf_contribution:.4f}",
+                        "color": "#93c5fd",
+                    }
+                )
+
+            sparse_rrf_contribution = res.metadata.get("sparse_rrf_contribution")
+            if sparse_rrf_contribution is not None:
+                badges.append(
+                    {
+                        "label": "Sparse Contribution",
+                        "value": f"{sparse_rrf_contribution:.4f}",
+                        "color": "#fecdd3",
+                    }
+                )
+
+            custom_badges.append(badges)
+
     # Render using the reusable component in card mode
     render_chunk_cards(
         chunk_display_data=retrieved_display_data,
@@ -268,31 +291,6 @@ def render_query_step() -> None:
 
     st.write("")
 
-    cols = st.columns(3)
-    with cols[0]:
-        ui.metric_card(
-            title="Indexed Chunks",
-            content=str(vector_store.size),
-            description="Total chunks in store",
-            key="metric_chunks"
-        )
-    with cols[1]:
-        ui.metric_card(
-            title="Embedding Model",
-            content=model_name.split("/")[-1], # Shorten model name if path
-            description="Used for retrieval",
-            key="metric_embed_model"
-        )
-    with cols[2]:
-        llm_model = st.session_state.get("llm_model", "Default")
-        ui.metric_card(
-            title="LLM Model",
-            content=llm_model,
-            description="Generation model",
-            key="metric_llm_model"
-        )
-
-    st.write("")
     
     # === Query Input Section ===
     with st.container(border=True):

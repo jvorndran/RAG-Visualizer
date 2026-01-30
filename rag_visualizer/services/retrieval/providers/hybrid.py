@@ -126,6 +126,9 @@ class HybridRetriever(RetrieverProvider):
 
         for idx, score in sorted_indices:
             original = result_map[idx]
+            d_score = dense_scores.get(idx, 0.0)
+            s_score = sparse_scores.get(idx, 0.0)
+            
             results.append(
                 SearchResult(
                     index=idx,
@@ -135,6 +138,10 @@ class HybridRetriever(RetrieverProvider):
                         **original.metadata,
                         "fusion_method": "weighted_sum",
                         "dense_weight": dense_weight,
+                        "dense_score": d_score,
+                        "sparse_score": s_score,
+                        "dense_weighted_score": dense_weight * d_score,
+                        "sparse_weighted_score": sparse_weight * s_score,
                     },
                 )
             )
@@ -172,10 +179,16 @@ class HybridRetriever(RetrieverProvider):
         if rrf_scores:
             rrf_score_list = list(rrf_scores.values())
             normalized_scores = self._normalize_scores(rrf_score_list)
-            rrf_scores = dict(zip(rrf_scores.keys(), normalized_scores, strict=True))
+            # Create a map of raw score -> normalized score for metadata if needed
+            # But here we just need to update the scores in rrf_scores
+            # However, we lost the raw score if we overwrite. 
+            # Let's keep a separate map for normalized scores.
+            normalized_rrf_scores = dict(zip(rrf_scores.keys(), normalized_scores, strict=True))
+        else:
+            normalized_rrf_scores = {}
 
-        # Sort by RRF score and get top k
-        sorted_indices = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)[
+        # Sort by RRF score (normalized or raw, order is same) and get top k
+        sorted_indices = sorted(normalized_rrf_scores.items(), key=lambda x: x[1], reverse=True)[
             :k
         ]
 
@@ -185,6 +198,19 @@ class HybridRetriever(RetrieverProvider):
 
         for idx, score in sorted_indices:
             original = result_map[idx]
+            
+            # Calculate contribution scores for visualization
+            dense_rank = dense_ranks.get(idx)
+            sparse_rank = sparse_ranks.get(idx)
+            
+            dense_rrf_score = (1.0 / (rrf_k + dense_rank)) if dense_rank else 0.0
+            sparse_rrf_score = (1.0 / (rrf_k + sparse_rank)) if sparse_rank else 0.0
+            raw_total = dense_rrf_score + sparse_rrf_score
+            dense_rrf_share = dense_rrf_score / raw_total if raw_total > 0 else 0.0
+            sparse_rrf_share = sparse_rrf_score / raw_total if raw_total > 0 else 0.0
+            dense_rrf_contribution = score * dense_rrf_share
+            sparse_rrf_contribution = score * sparse_rrf_share
+            
             results.append(
                 SearchResult(
                     index=idx,
@@ -194,6 +220,12 @@ class HybridRetriever(RetrieverProvider):
                         **original.metadata,
                         "fusion_method": "rrf",
                         "rrf_k": rrf_k,
+                        "dense_rank": dense_rank,
+                        "sparse_rank": sparse_rank,
+                        "dense_rrf_score": dense_rrf_score,
+                        "sparse_rrf_score": sparse_rrf_score,
+                        "dense_rrf_contribution": dense_rrf_contribution,
+                        "sparse_rrf_contribution": sparse_rrf_contribution,
                     },
                 )
             )
