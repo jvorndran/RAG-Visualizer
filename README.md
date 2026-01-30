@@ -28,24 +28,12 @@ cd rag-visualizer
 pip install -e .
 ```
 
-### Optional Dependencies
+### Development Dependencies
 
-Install LLM support for RAG query generation:
-
-```bash
-pip install rag-visualizer[llm]
-```
-
-Install NLP enhancements:
+For contributing to the project, install development tools:
 
 ```bash
-pip install rag-visualizer[nlp]
-```
-
-Install all optional dependencies:
-
-```bash
-pip install rag-visualizer[all]
+pip install rag-visualizer[dev]
 ```
 
 ### GPU Acceleration
