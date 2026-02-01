@@ -72,6 +72,17 @@ DEFAULT_SYSTEM_PROMPT = (
     "say so clearly. Be concise but thorough in your response."
 )
 
+DEFAULT_QUERY_REWRITE_PROMPT = (
+    "Generate {count} alternate phrasings of the user's question for search retrieval. "
+    "Keep the meaning the same. Use varied wording and terminology. "
+    "Return only the rewrites, one per line, with no numbering or bullets.\n\n"
+    "Question: {query}"
+)
+
+DEFAULT_QUERY_REWRITE_SYSTEM_PROMPT = (
+    "You rewrite user questions into effective search queries."
+)
+
 
 @dataclass
 class LLMConfig:
@@ -136,6 +147,57 @@ def _build_user_prompt(context: RAGContext) -> str:
     if context_text:
         return f"{context_text}\n\nQuestion: {context.query}"
     return f"Question: {context.query}"
+
+
+def _parse_rewrite_variations(text: str, max_count: int) -> list[str]:
+    lines = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        for prefix in ("- ", "* ", "• "):
+            if line.startswith(prefix):
+                line = line[len(prefix):].strip()
+                break
+        if line and line[0].isdigit():
+            idx = 1
+            while idx < len(line) and line[idx].isdigit():
+                idx += 1
+            if idx < len(line) and line[idx] in (".", ")"):
+                line = line[idx + 1 :].strip()
+        if line:
+            lines.append(line)
+        if len(lines) >= max_count:
+            break
+    return lines
+
+
+def rewrite_query_variations(
+    config: LLMConfig,
+    query: str,
+    count: int = 4,
+    prompt: str = DEFAULT_QUERY_REWRITE_PROMPT,
+    system_prompt: str = DEFAULT_QUERY_REWRITE_SYSTEM_PROMPT,
+) -> list[str]:
+    """Generate alternate phrasings of a query for multi-query retrieval."""
+    rewrite_config = LLMConfig(
+        provider=config.provider,
+        model=config.model,
+        api_key=config.api_key,
+        base_url=config.base_url,
+        temperature=0.2,
+        max_tokens=min(256, config.max_tokens),
+    )
+    user_prompt = prompt.format(query=query, count=count)
+
+    if rewrite_config.provider in ("OpenAI", "OpenAI-Compatible"):
+        response = _generate_openai(rewrite_config, system_prompt, user_prompt)
+    elif rewrite_config.provider == "Anthropic":
+        response = _generate_anthropic(rewrite_config, system_prompt, user_prompt)
+    else:
+        raise ValueError(f"Unknown provider: {rewrite_config.provider}")
+
+    return _parse_rewrite_variations(response, count)
 
 
 def generate_response(

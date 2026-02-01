@@ -13,6 +13,7 @@ import streamlit_shadcn_ui as ui
 
 from rag_visualizer.services.embedders import DEFAULT_MODEL, get_embedder
 from rag_visualizer.services.llm import (
+    DEFAULT_QUERY_REWRITE_PROMPT,
     DEFAULT_SYSTEM_PROMPT,
     LLMConfig,
     RAGContext,
@@ -213,6 +214,17 @@ def _render_retrieved_chunks(
     )
 
 
+def _render_query_variations(variations: list[str]) -> None:
+    if not variations:
+        return
+
+    with st.container(border=True):
+        st.markdown("#### Query Variations")
+        for variation in variations:
+            st.markdown(f"- {variation}")
+        st.caption("Retrieved chunks are the union of results from all variations.")
+
+
 def _get_llm_config_from_sidebar() -> tuple[LLMConfig, str]:
     """Get LLM configuration from sidebar session state."""
     provider = st.session_state.get("llm_provider", "OpenAI")
@@ -239,6 +251,18 @@ def _get_llm_config_from_sidebar() -> tuple[LLMConfig, str]:
     )
     
     return config, system_prompt
+
+
+def _merge_search_results(results_by_query: list[list[Any]]) -> list[Any]:
+    """Merge results from multiple queries by best score per chunk."""
+    merged: dict[int, Any] = {}
+    for results in results_by_query:
+        for result in results:
+            existing = merged.get(result.index)
+            if existing is None or result.score > existing.score:
+                merged[result.index] = result
+
+    return sorted(merged.values(), key=lambda res: res.score, reverse=True)
 
 
 def render_query_step() -> None:
@@ -269,6 +293,8 @@ def render_query_step() -> None:
         st.session_state.current_response = None
     if "last_search_results" not in st.session_state:
         st.session_state.last_search_results = None
+    if "last_query_variations" not in st.session_state:
+        st.session_state.last_query_variations = []
     
     # === Header & Metrics ===
     st.subheader("Query & Retrieval")
@@ -335,6 +361,31 @@ def render_query_step() -> None:
                     key="threshold_slider"
                 )
 
+        with st.expander("Query Expansion", expanded=False):
+            enable_query_expansion = st.checkbox(
+                "Generate query variations with the LLM",
+                value=False,
+                key="query_expansion_enabled",
+                help="Creates multiple alternate phrasings and unions their results.",
+            )
+            variation_count = st.slider(
+                "Number of variations",
+                min_value=3,
+                max_value=5,
+                value=4,
+                key="query_expansion_count",
+            )
+            rewrite_prompt = st.text_area(
+                "Rewrite Prompt",
+                value=st.session_state.get(
+                    "query_rewrite_prompt",
+                    DEFAULT_QUERY_REWRITE_PROMPT,
+                ),
+                height=120,
+                key="query_rewrite_prompt",
+                help="Prompt used to generate query variations for retrieval.",
+            )
+
         with st.expander("System Prompt", expanded=False):
             query_system_prompt = st.text_area(
                 "System Prompt",
@@ -344,12 +395,13 @@ def render_query_step() -> None:
                 label_visibility="collapsed",
                 help="Instructions for how the model should behave."
             )
-    
+
     # === Process Query: Retrieve + Generate ===
     if ask_clicked and query_text.strip():
         # Clear previous results
         st.session_state.current_query = query_text.strip()
         st.session_state.current_response = None
+        st.session_state.last_query_variations = []
         
         # Get LLM config from sidebar
         llm_config, _ = _get_llm_config_from_sidebar()
@@ -364,7 +416,27 @@ def render_query_step() -> None:
             st.info("Please configure your LLM settings in the sidebar.")
             return
         
-        # Step 1: Retrieve chunks using configured strategy
+        # Step 1: Build query variations (optional)
+        query_variations: list[str] = []
+        if enable_query_expansion:
+            from rag_visualizer.services.llm import rewrite_query_variations
+
+            with st.spinner("Generating query variations..."):
+                try:
+                    query_variations = rewrite_query_variations(
+                        llm_config,
+                        query_text.strip(),
+                        count=variation_count,
+                        prompt=rewrite_prompt,
+                    )
+                except Exception as e:
+                    st.warning(f"Query expansion failed: {str(e)}")
+                    query_variations = []
+
+            if query_variations:
+                st.session_state.last_query_variations = query_variations
+
+        # Step 2: Retrieve chunks using configured strategy
         with st.spinner("Retrieving context..."):
             from rag_visualizer.services.retrieval import retrieve
             from rag_visualizer.services.retrieval.reranking import (
@@ -394,24 +466,36 @@ def render_query_step() -> None:
                     }
                     params = {}
 
-            # Retrieve
-            try:
-                all_results = retrieve(
-                    query=query_text.strip(),
-                    vector_store=vector_store,
-                    embedder=embedder,
-                    retriever_name=retrieval_config["strategy"],
-                    k=top_k,
-                    **params
+            queries_to_search = [query_text.strip()]
+            if query_variations:
+                queries_to_search.extend(
+                    [q for q in query_variations if q.strip() and q.strip() != query_text.strip()]
                 )
+
+            # Retrieve (multi-query)
+            try:
+                results_by_query = []
+                for query in queries_to_search:
+                    results_by_query.append(
+                        retrieve(
+                            query=query,
+                            vector_store=vector_store,
+                            embedder=embedder,
+                            retriever_name=retrieval_config["strategy"],
+                            k=top_k,
+                            **params
+                        )
+                    )
+                all_results = _merge_search_results(results_by_query)
             except Exception as e:
                 st.error(f"Retrieval failed: {str(e)}")
                 all_results = []
 
             # Apply threshold filter
             search_results = [r for r in all_results if r.score >= threshold]
+            search_results = search_results[:top_k]
 
-            # Optional reranking
+            # Optional reranking (uses original query)
             reranking_config_raw = st.session_state.get("reranking_config")
             reranking_config = reranking_config_raw if isinstance(reranking_config_raw, dict) else {"enabled": False}
             if reranking_config.get("enabled", False) and search_results:
@@ -439,6 +523,7 @@ def render_query_step() -> None:
         
         # Display retrieved chunks immediately in the bottom container
         with chunks_container:
+            _render_query_variations(st.session_state.last_query_variations)
             if search_results:
                 _render_retrieved_chunks(search_results)
             else:
@@ -506,4 +591,5 @@ def render_query_step() -> None:
 
         # Show previous chunks below
         if "last_search_results" in st.session_state:
+            _render_query_variations(st.session_state.last_query_variations)
             _render_retrieved_chunks(st.session_state.last_search_results)

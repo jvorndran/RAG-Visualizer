@@ -627,6 +627,82 @@ def render_chunk_cards(
                 )
 
         chunks_html_parts.append("</div>")  # End metadata grid
+
+        # Add RRF Fusion Details if available
+        if chunk_metadata.get("fusion_method") == "rrf":
+            dense_rank = chunk_metadata.get("dense_rank")
+            sparse_rank = chunk_metadata.get("sparse_rank")
+            dense_score = chunk_metadata.get("dense_rrf_score", 0)
+            sparse_score = chunk_metadata.get("sparse_rrf_score", 0)
+            rrf_k = chunk_metadata.get("rrf_k", 60)
+
+            # Calculate percentages
+            total = dense_score + sparse_score
+            dense_pct = (dense_score / total * 100) if total > 0 else 0
+            sparse_pct = (sparse_score / total * 100) if total > 0 else 0
+
+            chunks_html_parts.append(
+                '<div class="chunk-context-label" style="margin-top: 12px;">RRF Fusion Breakdown</div>'
+            )
+            chunks_html_parts.append('<div style="font-size: 0.75rem; line-height: 1.5;">')
+
+            # Dense contribution
+            if dense_rank is not None:
+                chunks_html_parts.append(
+                    f'<div style="margin-bottom: 8px;">'
+                    f'<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">'
+                    f'<span style="color: #374151;">Dense (Semantic): Rank #{dense_rank}</span>'
+                    f'<span style="color: #6b7280; font-family: monospace;">'
+                    f'1/({rrf_k}+{dense_rank}) = {dense_score:.4f}</span>'
+                    f'</div>'
+                    f'<div style="background: #e0e7ff; height: 8px; border-radius: 4px; overflow: hidden;">'
+                    f'<div style="background: #4f46e5; height: 100%; width: {dense_pct}%;"></div>'
+                    f'</div>'
+                    f'<div style="color: #6b7280; font-size: 0.7rem; margin-top: 1px;">'
+                    f'Contributes {dense_pct:.1f}% to final score</div>'
+                    f'</div>'
+                )
+            else:
+                chunks_html_parts.append(
+                    '<div style="margin-bottom: 8px; color: #9ca3af;">'
+                    'Dense (Semantic): Not found in top results'
+                    '</div>'
+                )
+
+            # Sparse contribution
+            if sparse_rank is not None:
+                chunks_html_parts.append(
+                    f'<div style="margin-bottom: 4px;">'
+                    f'<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">'
+                    f'<span style="color: #374151;">Sparse (BM25): Rank #{sparse_rank}</span>'
+                    f'<span style="color: #6b7280; font-family: monospace;">'
+                    f'1/({rrf_k}+{sparse_rank}) = {sparse_score:.4f}</span>'
+                    f'</div>'
+                    f'<div style="background: #fef3c7; height: 8px; border-radius: 4px; overflow: hidden;">'
+                    f'<div style="background: #f59e0b; height: 100%; width: {sparse_pct}%;"></div>'
+                    f'</div>'
+                    f'<div style="color: #6b7280; font-size: 0.7rem; margin-top: 1px;">'
+                    f'Contributes {sparse_pct:.1f}% to final score</div>'
+                    f'</div>'
+                )
+            else:
+                chunks_html_parts.append(
+                    '<div style="margin-bottom: 4px; color: #9ca3af;">'
+                    'Sparse (BM25): Not found in top results'
+                    '</div>'
+                )
+
+            # Summary
+            chunks_html_parts.append(
+                f'<div style="margin-top: 8px; padding-top: 8px; '
+                f'border-top: 1px solid rgba(0,0,0,0.08); color: #374151;">'
+                f'<strong>Combined RRF Score:</strong> {dense_score + sparse_score:.4f} '
+                f'<span style="color: #6b7280;">(normalized in final ranking)</span>'
+                f'</div>'
+            )
+
+            chunks_html_parts.append("</div>")  # End RRF breakdown
+
         chunks_html_parts.append("</div>")  # End expanded content
         chunks_html_parts.append("</details>")
 
