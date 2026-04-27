@@ -603,28 +603,28 @@ def render_query_step() -> None:
         )
 
     # === Process Query: Retrieve + Generate ===
-    # Detect if retrieval parameters changed (to re-run query automatically)
-    should_requery = False
+    # Detect parameter changes, but leave the expensive query pipeline behind
+    # the explicit Ask button.
+    query_params_changed = False
     if st.session_state.current_query:
         last_top_k = st.session_state.get("last_top_k")
         last_threshold = st.session_state.get("last_threshold")
 
         if last_top_k != top_k or last_threshold != threshold:
-            should_requery = True
+            query_params_changed = True
 
-    if (ask_clicked and query_text.strip()) or should_requery:
+    if query_params_changed:
+        st.info("Query settings changed. Click Ask to run the query with the new settings.")
+
+    if ask_clicked and query_text.strip():
         # Clear previous results
-        if ask_clicked:
-            st.session_state.current_query = query_text.strip()
+        st.session_state.current_query = query_text.strip()
         st.session_state.current_response = None
         st.session_state.last_query_variations = []
 
         # Store current parameters for change detection
         st.session_state.last_top_k = top_k
         st.session_state.last_threshold = threshold
-
-        # Use current query if re-querying
-        query_text = st.session_state.current_query if should_requery else query_text
 
         # Get LLM config from sidebar
         llm_config, _ = _get_llm_config_from_sidebar()
@@ -724,16 +724,15 @@ def render_query_step() -> None:
             try:
                 results_by_query = []
                 for query in queries_to_search:
-                    results_by_query.append(
-                        retrieve(
-                            query=query,
-                            vector_store=vector_store,
-                            embedder=embedder,
-                            retriever_name=retrieval_config["strategy"],
-                            k=top_k,
-                            **params,
-                        )
+                    query_results = retrieve(
+                        query=query,
+                        vector_store=vector_store,
+                        embedder=embedder,
+                        retriever_name=retrieval_config["strategy"],
+                        k=top_k,
+                        **params,
                     )
+                    results_by_query.append(query_results)
                 all_results = _merge_search_results(results_by_query)
             except Exception as e:
                 st.error(f"Retrieval failed: {str(e)}")
