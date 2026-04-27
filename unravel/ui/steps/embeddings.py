@@ -13,6 +13,7 @@ from unravel.services.embedders import (
     get_embedder,
 )
 from unravel.services.retrieval import (
+    preprocess_retriever,
     retrieve,
 )
 from unravel.services.storage import (
@@ -353,7 +354,7 @@ def render_embeddings_step() -> None:
 
         st.info(
             "Embeddings need to be generated for the current document and model. "
-            "This can take a little while for larger documents."
+            f"Estimated time: ~{est_time:.0f}s for {len(chunks)} chunks."
         )
         if not st.button(
             "Generate embeddings",
@@ -422,8 +423,6 @@ def render_embeddings_step() -> None:
             ]:
                 with st.spinner("Building BM25 index for sparse/hybrid retrieval..."):
                     try:
-                        from unravel.services.retrieval import preprocess_retriever
-
                         bm25_data = preprocess_retriever(
                             "SparseRetriever",
                             vector_store,
@@ -590,8 +589,6 @@ def render_embeddings_step() -> None:
                     bm25_data = st.session_state.get("bm25_index_data")
                     if not bm25_data:
                         try:
-                            from unravel.services.retrieval import preprocess_retriever
-
                             bm25_data = preprocess_retriever(
                                 "SparseRetriever",
                                 vector_store,

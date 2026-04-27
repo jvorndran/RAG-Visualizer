@@ -213,10 +213,7 @@ if os.getenv("DEMO_MODE") == "true":
     )
 
 
-_fragment = st.fragment if hasattr(st, "fragment") else lambda func: func
-
-
-@_fragment
+@st.fragment
 def render_main_content() -> None:
     """Render step navigation and content as a fragment.
 

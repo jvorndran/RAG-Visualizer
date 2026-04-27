@@ -55,12 +55,15 @@ def _get_chunks_state_key(
     """Build a stable key for the currently displayed chunks."""
     payload = {
         "doc": selected_doc,
-        "source_hash": hashlib.md5(source_text.encode("utf-8")).hexdigest(),
+        "source_hash": hashlib.md5(
+            source_text.encode("utf-8"),
+            usedforsecurity=False,
+        ).hexdigest(),
         "output_format": output_format,
         "chunking_params": chunking_params,
     }
     key_text = json.dumps(payload, sort_keys=True, default=str)
-    return hashlib.md5(key_text.encode("utf-8")).hexdigest()
+    return hashlib.md5(key_text.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 def estimate_parsing_time(doc_path: Path, params: dict[str, Any]) -> float:
@@ -334,11 +337,14 @@ def render_chunks_step() -> None:
                     )
                 total_pages = max(1, (total_chunks + page_size - 1) // page_size)
                 with col_page:
+                    st.session_state["chunks_page"] = max(
+                        1,
+                        min(st.session_state.get("chunks_page", 1), total_pages),
+                    )
                     page = st.number_input(
                         "Page",
                         min_value=1,
                         max_value=total_pages,
-                        value=min(st.session_state.get("chunks_page", 1), total_pages),
                         key="chunks_page",
                     )
                 start = (page - 1) * page_size

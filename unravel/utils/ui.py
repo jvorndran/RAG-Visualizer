@@ -97,4 +97,4 @@ def render_step_nav(active_step: str = "chunks") -> None:
 
     if selected_id and selected_id != active_step:
         st.session_state.current_step = selected_id
-        st.rerun()
+        st.rerun(scope="fragment")

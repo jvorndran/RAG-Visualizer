@@ -605,13 +605,24 @@ def render_query_step() -> None:
     # === Process Query: Retrieve + Generate ===
     # Detect parameter changes, but leave the expensive query pipeline behind
     # the explicit Ask button.
+    current_query_settings = {
+        "top_k": top_k,
+        "threshold": threshold,
+        "enable_query_expansion": enable_query_expansion,
+        "variation_count": variation_count,
+        "rewrite_prompt": rewrite_prompt,
+        "query_system_prompt": query_system_prompt,
+        "retrieval_config": st.session_state.get(
+            "retrieval_config",
+            {"strategy": "DenseRetriever", "params": {}},
+        ),
+        "reranking_config": st.session_state.get("reranking_config", {"enabled": False}),
+    }
     query_params_changed = False
     if st.session_state.current_query:
-        last_top_k = st.session_state.get("last_top_k")
-        last_threshold = st.session_state.get("last_threshold")
-
-        if last_top_k != top_k or last_threshold != threshold:
-            query_params_changed = True
+        query_params_changed = (
+            st.session_state.get("last_query_settings") != current_query_settings
+        )
 
     if query_params_changed:
         st.info("Query settings changed. Click Ask to run the query with the new settings.")
@@ -625,6 +636,7 @@ def render_query_step() -> None:
         # Store current parameters for change detection
         st.session_state.last_top_k = top_k
         st.session_state.last_threshold = threshold
+        st.session_state.last_query_settings = current_query_settings.copy()
 
         # Get LLM config from sidebar
         llm_config, _ = _get_llm_config_from_sidebar()
