@@ -4,7 +4,6 @@ import streamlit as st
 import streamlit_shadcn_ui as ui
 
 from unravel.services.embedders import DEFAULT_MODEL
-from unravel.ui.constants import WidgetKeys
 from unravel.services.export import (
     ExportConfig,
     generate_chunking_code,
@@ -16,12 +15,24 @@ from unravel.services.export import (
     generate_retrieval_code,
     get_config_summary,
 )
+from unravel.ui.constants import WidgetKeys
+from unravel.utils.ui import render_page_header, render_section_heading
+
+
+def _render_code_section(title: str, caption: str, code: str, language: str) -> None:
+    """Render a consistent export code section."""
+    render_section_heading(title, caption)
+    with st.container(border=True):
+        st.code(code, language=language)
 
 
 def render_export_step() -> None:
     """Render the export code step."""
-    st.markdown("## Export Code")
-    st.caption("Export your configured RAG pipeline as Python code snippets")
+    render_page_header(
+        "Export code",
+        "Export your configured RAG pipeline as reusable Python snippets.",
+        "Export",
+    )
 
     # Check if we have configuration to export
     chunking_params = st.session_state.get(
@@ -34,9 +45,11 @@ def render_export_step() -> None:
 
     if not chunking_params:
         st.info(
-            "Configure your pipeline first. Go to the Text Splitting or Vector Embedding steps to set up your configuration."
+            "Configure your pipeline first. Go to Text Splitting or Vector Embedding "
+            "to set up your configuration.",
+            icon=":material/info:",
         )
-        if ui.button("Go to Text Splitting", key=WidgetKeys.EXPORT_GOTO_CHUNKS):
+        if ui.button("Go to text splitting", key=WidgetKeys.EXPORT_GOTO_CHUNKS):
             st.session_state.current_step = "chunks"
             st.rerun(scope="app")
         return
@@ -88,61 +101,64 @@ def render_export_step() -> None:
         llm_config=llm_config,
     )
 
-    # Installation section
-    st.markdown("### Installation")
-    st.caption("Install the required dependencies")
-    st.code(generate_installation_command(config), language="bash")
-
-   
-
-    # Parsing section
-    st.markdown("### Document Parsing")
-    st.caption("Parse documents and extract text content")
-    st.code(generate_parsing_code(config), language="python")
-
-   
-
-    # Chunking section
-    st.markdown("### Text Chunking")
-    st.caption("Split text into overlapping chunks for embedding")
-    st.code(generate_chunking_code(config), language="python")
-
-   
-
-    # Embedding section
-    st.markdown("### Embedding Generation")
-    st.caption("Generate vector embeddings for semantic search")
-    st.code(generate_embedding_code(config), language="python")
-
-   
+    _render_code_section(
+        "Installation",
+        "Install the required dependencies.",
+        generate_installation_command(config),
+        "bash",
+    )
+    _render_code_section(
+        "Document parsing",
+        "Parse documents and extract text content.",
+        generate_parsing_code(config),
+        "python",
+    )
+    _render_code_section(
+        "Text chunking",
+        "Split text into overlapping chunks for embedding.",
+        generate_chunking_code(config),
+        "python",
+    )
+    _render_code_section(
+        "Embedding generation",
+        "Generate vector embeddings for semantic search.",
+        generate_embedding_code(config),
+        "python",
+    )
 
     # Retrieval section (if configured)
     retrieval_code = generate_retrieval_code(config)
     if retrieval_code:
-        st.markdown("### Retrieval Strategy")
-        st.caption("Search for relevant chunks using your configured strategy")
-        st.code(retrieval_code, language="python")
-       
+        _render_code_section(
+            "Retrieval strategy",
+            "Search for relevant chunks using your configured strategy.",
+            retrieval_code,
+            "python",
+        )
 
     # Reranking section (if configured)
     reranking_code = generate_reranking_code(config)
     if reranking_code:
-        st.markdown("### Reranking")
-        st.caption("Improve retrieval quality with cross-encoder reranking")
-        st.code(reranking_code, language="python")
-       
+        _render_code_section(
+            "Reranking",
+            "Improve retrieval quality with cross-encoder reranking.",
+            reranking_code,
+            "python",
+        )
 
     # LLM section (if configured)
     llm_code = generate_llm_code(config)
     if llm_code:
-        st.markdown("### RAG Response Generation")
-        st.caption("Generate answers using retrieved context and LLM")
-        st.code(llm_code, language="python")
-       
+        _render_code_section(
+            "RAG response generation",
+            "Generate answers using retrieved context and LLM.",
+            llm_code,
+            "python",
+        )
 
     # Full pipeline section
-    with st.expander("View Full Pipeline Script", expanded=False):
-        st.caption("Combined script with all components")
+    with st.expander("View full pipeline script", expanded=False, icon=":material/code:"):
+        st.caption("Combined script with all components.")
         full_script = _generate_full_pipeline(config)
         st.code(full_script, language="python")
 

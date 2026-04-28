@@ -26,7 +26,7 @@ def _render_document_tab(current_parsing_params: dict) -> dict:
     parsing_params = {}
 
     # Output Format selector
-    st.markdown("**Output Format**")
+    st.markdown("**Output format**")
     format_display_map = {
         "Markdown": "markdown",
         "HTML": "html",
@@ -46,7 +46,7 @@ def _render_document_tab(current_parsing_params: dict) -> dict:
         st.session_state["chunking_config_output_format"] = current_format_display
 
     output_format = st.selectbox(
-        "Output Format",
+        "Output format",
         options=output_formats,
         key="chunking_config_output_format",
         label_visibility="collapsed",
@@ -55,7 +55,7 @@ def _render_document_tab(current_parsing_params: dict) -> dict:
 
     parsing_params["output_format"] = format_display_map.get(output_format, "markdown")
 
-    st.markdown("**Parsing Options**")
+    st.markdown("**Parsing options**")
 
     # Global page cap (Docling formats)
     max_pages = st.number_input(
@@ -70,13 +70,13 @@ def _render_document_tab(current_parsing_params: dict) -> dict:
 
     max_threads = max(1, min((os.cpu_count() or 4), 16))
 
-    docling_enable_ocr = st.checkbox(
+    docling_enable_ocr = st.toggle(
         "Enable OCR (slower, use for scanned PDFs)",
         value=current_parsing_params.get("docling_enable_ocr", False),
         key="chunking_config_docling_enable_ocr",
         help="Skip this for digital PDFs to speed up parsing.",
     )
-    docling_table_structure = st.checkbox(
+    docling_table_structure = st.toggle(
         "Extract tables and layout",
         value=current_parsing_params.get("docling_table_structure", True),
         key="chunking_config_docling_table_structure",
@@ -95,29 +95,31 @@ def _render_document_tab(current_parsing_params: dict) -> dict:
     )
 
     # Advanced Table Options
-    with st.expander("Advanced Table Options", expanded=False):
-        enable_table_merging = st.checkbox(
+    with st.expander("Advanced table options", expanded=False, icon=":material/table_chart:"):
+        enable_table_merging = st.toggle(
             "Enable table merging",
             value=current_parsing_params.get("enable_table_merging", True),
             key="chunking_config_enable_table_merging",
             help="Merge adjacent table cells that span multiple rows or columns.",
         )
-        enable_table_reconstruction = st.checkbox(
+        enable_table_reconstruction = st.toggle(
             "Enable table reconstruction",
             value=current_parsing_params.get("enable_table_reconstruction", True),
             key="chunking_config_enable_table_reconstruction",
             help="Reconstruct table structure from detected layout elements.",
         )
 
-    parsing_params.update({
-        "docling_device": "auto",
-        "docling_enable_ocr": docling_enable_ocr,
-        "docling_table_structure": docling_table_structure,
-        "docling_threads": docling_threads,
-        "enable_table_merging": enable_table_merging,
-        "enable_table_reconstruction": enable_table_reconstruction,
-        "max_pages": max_pages,
-    })
+    parsing_params.update(
+        {
+            "docling_device": "auto",
+            "docling_enable_ocr": docling_enable_ocr,
+            "docling_table_structure": docling_table_structure,
+            "docling_threads": docling_threads,
+            "enable_table_merging": enable_table_merging,
+            "enable_table_reconstruction": enable_table_reconstruction,
+            "max_pages": max_pages,
+        }
+    )
 
     return parsing_params
 
@@ -134,7 +136,7 @@ def _render_content_tab(current_parsing_params: dict) -> dict:
     """
     parsing_params = {}
 
-    st.markdown("**Content Filtering**")
+    st.markdown("**Content filtering**")
 
     # All available DocItemLabel options with human-readable names
     docling_filter_options = {
@@ -193,9 +195,9 @@ def _render_content_tab(current_parsing_params: dict) -> dict:
 
     parsing_params["docling_filter_labels"] = docling_filter_labels
 
-    st.markdown("**Image Extraction**")
+    st.markdown("**Image extraction**")
 
-    docling_extract_images = st.checkbox(
+    docling_extract_images = st.toggle(
         "Extract images from PDF",
         value=current_parsing_params.get("docling_extract_images", False),
         key="chunking_config_docling_extract_images",
@@ -216,12 +218,15 @@ def _render_content_tab(current_parsing_params: dict) -> dict:
         except ValueError:
             strategy_index = 0
 
-        description_strategy = st.radio(
-            "Description Strategy",
+        description_strategy = st.segmented_control(
+            "Description strategy",
             options=strategy_options,
-            index=strategy_index,
+            default=strategy_options[strategy_index],
             key="chunking_config_description_strategy",
-            help="Choose how to describe extracted images. Native uses Docling's local VLM (no API cost).",
+            help=(
+                "Choose how to describe extracted images. Native uses Docling's "
+                "local VLM with no API cost."
+            ),
         )
 
         docling_use_native_description = description_strategy == "Docling Native"
@@ -239,16 +244,22 @@ def _render_content_tab(current_parsing_params: dict) -> dict:
 
             if not llm_api_key:
                 st.warning("Configure a vision-capable LLM in the LLM Config tab.")
-            elif llm_provider not in ("OpenAI-Compatible", "OpenRouter") and llm_model not in VISION_CAPABLE_MODELS.get(
-                llm_provider, []
-            ):
-                st.warning(f"Model '{llm_model}' may not support vision. Use GPT-5, Claude Opus, or Gemini 3 Pro.")
+            elif llm_provider not in (
+                "OpenAI-Compatible",
+                "OpenRouter",
+            ) and llm_model not in VISION_CAPABLE_MODELS.get(llm_provider, []):
+                st.warning(
+                    f"Model '{llm_model}' may not support vision. "
+                    "Use GPT-5, Claude Opus, or Gemini 3 Pro."
+                )
 
-    parsing_params.update({
-        "docling_extract_images": docling_extract_images,
-        "docling_enable_captioning": docling_enable_captioning,
-        "docling_use_native_description": docling_use_native_description,
-    })
+    parsing_params.update(
+        {
+            "docling_extract_images": docling_extract_images,
+            "docling_enable_captioning": docling_enable_captioning,
+            "docling_use_native_description": docling_use_native_description,
+        }
+    )
 
     return parsing_params
 
@@ -263,7 +274,7 @@ def _render_chunking_tab(current_chunking_params: dict) -> tuple[dict, str]:
     Returns:
         tuple: (chunking_params, provider_attribution)
     """
-    st.markdown("**Text Splitting**")
+    st.markdown("**Text splitting**")
 
     # Provider selection
     providers = get_available_providers()
@@ -297,7 +308,6 @@ def _render_chunking_tab(current_chunking_params: dict) -> tuple[dict, str]:
     elif st.session_state.get("chunking_config_splitter") not in splitter_options:
         st.session_state["chunking_config_splitter"] = current_display
 
-
     splitter_display = st.selectbox(
         "Strategy",
         options=splitter_options,
@@ -311,14 +321,26 @@ def _render_chunking_tab(current_chunking_params: dict) -> tuple[dict, str]:
     splitter_details = {
         "HierarchicalChunker": {
             "title": "Hierarchical Chunker",
-            "when_to_use": "Use when preserving document structure is important. Creates one chunk per logical element (paragraph, header, list, code block).",
-            "how_it_works": "Analyzes document structure and splits at natural boundaries like paragraphs, headers, and code blocks. Optionally merges very small chunks and tracks section hierarchy for better context.",
+            "when_to_use": (
+                "Use when preserving document structure is important. Creates one chunk per "
+                "logical element."
+            ),
+            "how_it_works": (
+                "Analyzes document structure and splits at natural boundaries. Optionally "
+                "merges very small chunks and tracks section hierarchy for better context."
+            ),
             "best_for": "Structured documents, documentation, articles with clear sections",
         },
         "HybridChunker": {
             "title": "Hybrid Chunker",
-            "when_to_use": "Best default choice for embedding-based RAG. Respects structure while ensuring chunks fit within model token limits.",
-            "how_it_works": "Combines structure-aware splitting with token counting. Accumulates structural elements until reaching the token limit, then creates a chunk. Supports overlap for continuity.",
+            "when_to_use": (
+                "Best default choice for embedding-based RAG. Respects structure while "
+                "keeping chunks within model token limits."
+            ),
+            "how_it_works": (
+                "Combines structure-aware splitting with token counting. Accumulates "
+                "elements until the token limit, then creates a chunk with optional overlap."
+            ),
             "best_for": "RAG applications, embedding models with fixed context windows",
         },
     }
@@ -326,7 +348,7 @@ def _render_chunking_tab(current_chunking_params: dict) -> tuple[dict, str]:
     # Show detailed explanation for selected splitter
     if splitter_name in splitter_details:
         details = splitter_details[splitter_name]
-        with st.expander(f"About {details['title']}", expanded=False):
+        with st.expander(f"About {details['title']}", expanded=False, icon=":material/info:"):
             st.markdown(f"**When to use:** {details['when_to_use']}")
             st.markdown(f"**How it works:** {details['how_it_works']}")
             st.markdown(f"**Best for:** {details['best_for']}")
@@ -337,7 +359,6 @@ def _render_chunking_tab(current_chunking_params: dict) -> tuple[dict, str]:
     # Render dynamic parameters
     splitter_params = {}
     if selected_info:
-       
 
         for param in selected_info.parameters:
             current_value = current_chunking_params.get(param.name, param.default)
@@ -369,7 +390,7 @@ def _render_chunking_tab(current_chunking_params: dict) -> tuple[dict, str]:
                         key=f"chunking_config_param_{param.name}",
                     )
             elif param.type == "bool":
-                value = st.checkbox(
+                value = st.toggle(
                     param.name.replace("_", " ").title(),
                     value=bool(current_value),
                     help=param.description,
@@ -458,10 +479,18 @@ def render_chunking_configuration() -> tuple[dict, dict, bool]:
         document_params = _render_document_tab(current_parsing_params)
         new_parsing_params.update(document_params)
         # Preserve content tab params from current state
-        new_parsing_params["docling_filter_labels"] = current_parsing_params.get("docling_filter_labels", ["PAGE_HEADER", "PAGE_FOOTER"])
-        new_parsing_params["docling_extract_images"] = current_parsing_params.get("docling_extract_images", False)
-        new_parsing_params["docling_enable_captioning"] = current_parsing_params.get("docling_enable_captioning", False)
-        new_parsing_params["docling_use_native_description"] = current_parsing_params.get("docling_use_native_description", False)
+        new_parsing_params["docling_filter_labels"] = current_parsing_params.get(
+            "docling_filter_labels", ["PAGE_HEADER", "PAGE_FOOTER"]
+        )
+        new_parsing_params["docling_extract_images"] = current_parsing_params.get(
+            "docling_extract_images", False
+        )
+        new_parsing_params["docling_enable_captioning"] = current_parsing_params.get(
+            "docling_enable_captioning", False
+        )
+        new_parsing_params["docling_use_native_description"] = current_parsing_params.get(
+            "docling_use_native_description", False
+        )
         # Preserve chunking params
         new_chunking_params = current_chunking_params.copy()
 
@@ -469,13 +498,23 @@ def render_chunking_configuration() -> tuple[dict, dict, bool]:
         content_params = _render_content_tab(current_parsing_params)
         new_parsing_params.update(content_params)
         # Preserve document tab params from current state
-        new_parsing_params["output_format"] = current_parsing_params.get("output_format", "markdown")
+        new_parsing_params["output_format"] = current_parsing_params.get(
+            "output_format", "markdown"
+        )
         new_parsing_params["docling_device"] = current_parsing_params.get("docling_device", "auto")
-        new_parsing_params["docling_enable_ocr"] = current_parsing_params.get("docling_enable_ocr", False)
-        new_parsing_params["docling_table_structure"] = current_parsing_params.get("docling_table_structure", True)
+        new_parsing_params["docling_enable_ocr"] = current_parsing_params.get(
+            "docling_enable_ocr", False
+        )
+        new_parsing_params["docling_table_structure"] = current_parsing_params.get(
+            "docling_table_structure", True
+        )
         new_parsing_params["docling_threads"] = current_parsing_params.get("docling_threads", 4)
-        new_parsing_params["enable_table_merging"] = current_parsing_params.get("enable_table_merging", True)
-        new_parsing_params["enable_table_reconstruction"] = current_parsing_params.get("enable_table_reconstruction", True)
+        new_parsing_params["enable_table_merging"] = current_parsing_params.get(
+            "enable_table_merging", True
+        )
+        new_parsing_params["enable_table_reconstruction"] = current_parsing_params.get(
+            "enable_table_reconstruction", True
+        )
         new_parsing_params["max_pages"] = current_parsing_params.get("max_pages", 50)
         # Preserve chunking params
         new_chunking_params = current_chunking_params.copy()
@@ -497,8 +536,8 @@ def render_chunking_configuration() -> tuple[dict, dict, bool]:
             '<div style="margin-top: 8px; margin-bottom: 12px;">'
             '<span style="background-color: #f59e0b; color: white; padding: 4px 10px; '
             'border-radius: 4px; font-size: 13px; font-weight: 500;">Changes pending</span>'
-            '</div>',
-            unsafe_allow_html=True
+            "</div>",
+            unsafe_allow_html=True,
         )
 
     return new_parsing_params, new_chunking_params, has_changes
