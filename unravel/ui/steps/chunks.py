@@ -1,8 +1,10 @@
-import streamlit as st
-import streamlit_shadcn_ui as ui
-
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
+
+import streamlit as st
+import streamlit_shadcn_ui as ui
 
 from unravel.services.chunking import get_chunks
 from unravel.services.storage import get_documents_dir, load_document, save_rag_config
@@ -41,6 +43,27 @@ _RATE_PER_MB: dict[str, float] = {
 }
 _BASE_OVERHEAD_SECONDS = 10.0
 _OCR_RATE_PER_MB = 150.0
+_DEFAULT_CHUNKS_PER_PAGE = 20
+
+
+def _get_chunks_state_key(
+    selected_doc: str,
+    source_text: str,
+    output_format: str,
+    chunking_params: dict[str, Any],
+) -> str:
+    """Build a stable key for the currently displayed chunks."""
+    payload = {
+        "doc": selected_doc,
+        "source_hash": hashlib.md5(
+            source_text.encode("utf-8"),
+            usedforsecurity=False,
+        ).hexdigest(),
+        "output_format": output_format,
+        "chunking_params": chunking_params,
+    }
+    key_text = json.dumps(payload, sort_keys=True, default=str)
+    return hashlib.md5(key_text.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 def estimate_parsing_time(doc_path: Path, params: dict[str, Any]) -> float:
@@ -91,6 +114,9 @@ def render_chunks_step() -> None:
             # Invalidate downstream caches
             for key in [
                 "chunks",
+                "chunks_cache_key",
+                "chunk_display_cache_key",
+                "chunk_display_data",
                 "last_embeddings_result",
                 "search_results",
                 "bm25_index_data",
@@ -239,13 +265,26 @@ def render_chunks_step() -> None:
         splitter_params = {
             k: v for k, v in chunking_params.items() if k not in ["provider", "splitter"]
         }
-        chunks = get_chunks(
-            provider=provider,
-            splitter=splitter,
-            text=source_text,
-            output_format=output_format,
-            **splitter_params,
+        chunk_state_key = _get_chunks_state_key(
+            selected_doc,
+            source_text,
+            output_format,
+            chunking_params,
         )
+        cached_chunk_key = st.session_state.get("chunks_cache_key")
+        cached_chunks = st.session_state.get("chunks")
+
+        if cached_chunk_key == chunk_state_key and cached_chunks:
+            chunks = cached_chunks
+        else:
+            chunks = get_chunks(
+                provider=provider,
+                splitter=splitter,
+                text=source_text,
+                output_format=output_format,
+                **splitter_params,
+            )
+            st.session_state["chunks_cache_key"] = chunk_state_key
 
         # Save chunks to session state (config already set in sidebar)
         st.session_state["chunks"] = chunks
@@ -264,11 +303,17 @@ def render_chunks_step() -> None:
         st.session_state["trigger_scroll_to_chunks"] = False
 
     # Prepare chunk display data (includes overlap calculation)
-    chunk_display_data = prepare_chunk_display_data(
-        chunks=chunks,
-        source_text=source_text,
-        calculate_overlap=True,
-    )
+    display_cache_key = f"{st.session_state.get('chunks_cache_key', '')}:display"
+    if st.session_state.get("chunk_display_cache_key") == display_cache_key:
+        chunk_display_data = st.session_state.get("chunk_display_data", [])
+    else:
+        chunk_display_data = prepare_chunk_display_data(
+            chunks=chunks,
+            source_text=source_text,
+            calculate_overlap=True,
+        )
+        st.session_state["chunk_display_cache_key"] = display_cache_key
+        st.session_state["chunk_display_data"] = chunk_display_data
 
     view_mode = ui.tabs(
         options=["Visual View", "Raw JSON"],
@@ -280,8 +325,37 @@ def render_chunks_step() -> None:
    
     if view_mode == "Visual View":
         with st.container(border=True):
+            total_chunks = len(chunk_display_data)
+            if total_chunks > _DEFAULT_CHUNKS_PER_PAGE:
+                col_size, col_page = st.columns([1, 2], vertical_alignment="center")
+                with col_size:
+                    page_size = st.selectbox(
+                        "Chunks per page",
+                        options=[10, 20, 50, 100],
+                        index=1,
+                        key="chunks_page_size",
+                    )
+                total_pages = max(1, (total_chunks + page_size - 1) // page_size)
+                with col_page:
+                    st.session_state["chunks_page"] = max(
+                        1,
+                        min(st.session_state.get("chunks_page", 1), total_pages),
+                    )
+                    page = st.number_input(
+                        "Page",
+                        min_value=1,
+                        max_value=total_pages,
+                        key="chunks_page",
+                    )
+                start = (page - 1) * page_size
+                end = start + page_size
+                st.caption(f"Showing chunks {start + 1}-{min(end, total_chunks)} of {total_chunks}")
+                visible_chunk_data = chunk_display_data[start:end]
+            else:
+                visible_chunk_data = chunk_display_data
+
             render_chunk_cards(
-                chunk_display_data=chunk_display_data,
+                chunk_display_data=visible_chunk_data,
                 show_overlap=True,
                 display_mode="continuous",
                 render_format=output_format,

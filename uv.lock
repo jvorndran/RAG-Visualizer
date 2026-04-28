@@ -10262,7 +10262,7 @@ requires-dist = [
     { name = "selenium", specifier = ">=4.6" },
     { name = "sentence-transformers", specifier = ">=2.2" },
     { name = "spacy", specifier = ">=3.7" },
-    { name = "streamlit", specifier = ">=1.28" },
+    { name = "streamlit", specifier = ">=1.37" },
     { name = "streamlit-shadcn-ui", specifier = ">=0.1.18" },
     { name = "tiktoken", specifier = ">=0.5" },
     { name = "trafilatura", specifier = ">=1.6" },

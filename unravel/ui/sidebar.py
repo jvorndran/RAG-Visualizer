@@ -59,6 +59,12 @@ def render_rag_config_sidebar() -> None:
         # Invalidate chunks and embeddings when switching from sample text
         if "chunks" in st.session_state:
             del st.session_state["chunks"]
+        if "chunks_cache_key" in st.session_state:
+            del st.session_state["chunks_cache_key"]
+        if "chunk_display_cache_key" in st.session_state:
+            del st.session_state["chunk_display_cache_key"]
+        if "chunk_display_data" in st.session_state:
+            del st.session_state["chunk_display_data"]
         if "last_embeddings_result" in st.session_state:
             del st.session_state["last_embeddings_result"]
         if "search_results" in st.session_state:
@@ -447,6 +453,9 @@ def render_rag_config_sidebar() -> None:
             # Document changed - invalidate everything
             for key in [
                 "chunks",
+                "chunks_cache_key",
+                "chunk_display_cache_key",
+                "chunk_display_data",
                 "last_embeddings_result",
                 "bm25_index_data",
                 "search_results",

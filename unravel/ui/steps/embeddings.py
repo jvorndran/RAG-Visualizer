@@ -13,6 +13,7 @@ from unravel.services.embedders import (
     get_embedder,
 )
 from unravel.services.retrieval import (
+    preprocess_retriever,
     retrieve,
 )
 from unravel.services.storage import (
@@ -36,6 +37,12 @@ from unravel.utils.visualization import (
     create_embedding_plot,
     reduce_dimensions,
 )
+
+
+@st.cache_data(ttl=5, show_spinner=False)
+def get_cached_qdrant_status() -> dict[str, Any]:
+    """Cache Qdrant status briefly to avoid shell/Docker checks on every rerun."""
+    return get_qdrant_status()
 
 
 def estimate_embedding_time(model_name: str, num_chunks: int) -> float:
@@ -113,7 +120,7 @@ def render_embeddings_step() -> None:
 
     # --- Qdrant Status Header ---
     with st.spinner("Checking Qdrant status..."):
-        qdrant_status = get_qdrant_status()
+        qdrant_status = get_cached_qdrant_status()
     is_running = qdrant_status.get("running", False)
     is_cloud = qdrant_status.get("status") == "cloud"
 
@@ -161,6 +168,7 @@ def render_embeddings_step() -> None:
                     with st.spinner("..."):
                         try:
                             restart_qdrant_server()
+                            get_cached_qdrant_status.clear()
                             st.rerun()
                         except RuntimeError as e:
                             st.error(str(e))
@@ -344,6 +352,17 @@ def render_embeddings_step() -> None:
         # Estimate time
         est_time = estimate_embedding_time(selected_model, len(chunks))
 
+        st.info(
+            "Embeddings need to be generated for the current document and model. "
+            f"Estimated time: ~{est_time:.0f}s for {len(chunks)} chunks."
+        )
+        if not st.button(
+            "Generate embeddings",
+            key=WidgetKeys.EMBEDDINGS_GENERATE_BTN,
+            type="primary",
+        ):
+            return
+
         def embedding_task(texts, model_name):
             return generate_embeddings(texts, model_name)
 
@@ -404,8 +423,6 @@ def render_embeddings_step() -> None:
             ]:
                 with st.spinner("Building BM25 index for sparse/hybrid retrieval..."):
                     try:
-                        from unravel.services.retrieval import preprocess_retriever
-
                         bm25_data = preprocess_retriever(
                             "SparseRetriever",
                             vector_store,
@@ -499,7 +516,10 @@ def render_embeddings_step() -> None:
     # IMPORTANT: We must also use the newly reduced embeddings to keep chunks and query in the same space
     if reducer is None and embeddings.shape[0] >= 5:
         with st.spinner("Refitting UMAP projection..."):
-            new_reduced, new_reducer = reduce_dimensions(embeddings, n_components=n_components)
+            new_reduced, new_reducer = reduce_dimensions(
+                embeddings,
+                n_components=n_components,
+            )
             state_data["projections"][n_components] = (new_reduced, new_reducer)
             reduced_embeddings = new_reduced
             reducer = new_reducer

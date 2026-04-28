@@ -37,6 +37,7 @@ class WidgetKeys:
     EMBEDDINGS_RESTART_QDRANT_BTN = "restart_qdrant_header_btn"
     EMBEDDINGS_GOTO_UPLOAD = "goto_upload_embeddings"
     EMBEDDINGS_GOTO_CHUNKS = "goto_chunks"
+    EMBEDDINGS_GENERATE_BTN = "generate_embeddings_btn"
     EMBEDDINGS_QUERY_INPUT = "query_input"
 
     # =========================================================================

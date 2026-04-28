@@ -213,7 +213,7 @@ if os.getenv("DEMO_MODE") == "true":
     )
 
 
-# @st.fragment
+@st.fragment
 def render_main_content() -> None:
     """Render step navigation and content as a fragment.
 
