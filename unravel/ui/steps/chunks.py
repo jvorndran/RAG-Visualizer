@@ -8,7 +8,6 @@ import streamlit_shadcn_ui as ui
 
 from unravel.services.chunking import get_chunks
 from unravel.services.storage import get_documents_dir, load_document, save_rag_config
-from unravel.ui.constants import WidgetKeys
 from unravel.ui.components.chunk_viewer import (
     prepare_chunk_display_data,
     render_chunk_cards,
@@ -16,12 +15,14 @@ from unravel.ui.components.chunk_viewer import (
 from unravel.ui.components.chunking_config import render_chunking_configuration
 from unravel.ui.components.progress_bar import timed_progress_bar
 from unravel.ui.components.scroll_utils import scroll_to_element
+from unravel.ui.constants import WidgetKeys
 from unravel.utils.cache import (
     get_parsed_text_key,
     load_parsed_text,
     save_parsed_text,
 )
 from unravel.utils.parsers import parse_document
+from unravel.utils.ui import render_page_header
 
 # Seconds per MB by file extension
 _RATE_PER_MB: dict[str, float] = {
@@ -90,17 +91,19 @@ def render_chunks_step() -> None:
     # Check if demo mode is enabled
     is_demo_mode = os.getenv("DEMO_MODE") == "true"
 
-    st.markdown("## Document Processing & Text Splitting")
-    st.caption("Configure document parsing and text splitting")
+    render_page_header(
+        "Document processing & text splitting",
+        "Configure parsing, text splitting, and chunk inspection for the selected document.",
+        "Text splitting",
+    )
 
     # Render chunking configuration
 
     with st.expander("Configuration", expanded=False):
         new_parsing_params, new_chunking_params, has_changes = render_chunking_configuration()
 
-
         if st.button(
-            "Apply Configuration",
+            "Apply configuration",
             type="primary",
             disabled=not has_changes,
             key=WidgetKeys.CHUNKS_APPLY_BTN,
@@ -135,7 +138,7 @@ def render_chunks_step() -> None:
                     }
                 )
 
-            st.success("Configuration applied successfully!")
+            st.success("Configuration applied successfully", icon=":material/check_circle:")
             st.rerun()
 
     # Read configuration from session state
@@ -161,16 +164,15 @@ def render_chunks_step() -> None:
 
     provider = chunking_params.get("provider", "Docling")
     splitter = chunking_params.get("splitter", "HybridChunker")
-    max_tokens = chunking_params.get("max_tokens", 512)
-    overlap_size = chunking_params.get("chunk_overlap", 50)
 
     # Check if document is selected
     if not selected_doc:
         st.info(
             "No document selected. Upload a file in the Upload step or "
-            "select a document in the sidebar (RAG Config tab)."
+            "select a document in the sidebar.",
+            icon=":material/info:",
         )
-        if st.button("Go to Upload Step", key=WidgetKeys.CHUNKS_GOTO_UPLOAD, type="primary"):
+        if st.button("Go to upload", key=WidgetKeys.CHUNKS_GOTO_UPLOAD, type="primary"):
             st.session_state.current_step = "upload"
             st.rerun(scope="app")
         return
@@ -193,12 +195,10 @@ def render_chunks_step() -> None:
             # Restore to session state
             st.session_state[parsed_text_key] = source_text
 
-    doc_display_name = selected_doc
-
     # Show parse button if no parsed text OR if parsing settings have changed
     needs_parsing = not source_text or parsing_settings_changed
     if needs_parsing:
-       
+
         col1, col2, col3 = st.columns([1, 2, 1])
         with col1:
             button_text = (
@@ -226,13 +226,9 @@ def render_chunks_step() -> None:
                         parsed_text, _, _ = result
                         # Update applied params to match current
                         # (so they're in sync after reparse)
-                        st.session_state["applied_parsing_params"] = (
-                            current_parsing_params.copy()
-                        )
+                        st.session_state["applied_parsing_params"] = current_parsing_params.copy()
                         new_applied_params = current_parsing_params.copy()
-                        new_parsed_text_key = get_parsed_text_key(
-                            selected_doc, new_applied_params
-                        )
+                        new_parsed_text_key = get_parsed_text_key(selected_doc, new_applied_params)
                         # Cache parsed text in session state
                         st.session_state[new_parsed_text_key] = parsed_text
                         # Save to persistent storage (skip in demo mode)
@@ -248,10 +244,14 @@ def render_chunks_step() -> None:
 
         if parsing_settings_changed and source_text:
             st.info(
-                "Parsing settings have changed. Click the button above to reparse the document with new settings."
+                "Parsing settings changed. Reparse the document to use the new settings.",
+                icon=":material/info:",
             )
         else:
-            st.info("Click the button above to parse the document and generate chunks.")
+            st.info(
+                "Parse the document to generate chunks.",
+                icon=":material/info:",
+            )
 
         # If we have no parsed text, return early until the user parses.
         # Otherwise, continue to show the existing parsed text even if settings changed.
@@ -322,7 +322,7 @@ def render_chunks_step() -> None:
     )
 
     # Render based on selected view
-   
+
     if view_mode == "Visual View":
         with st.container(border=True):
             total_chunks = len(chunk_display_data)

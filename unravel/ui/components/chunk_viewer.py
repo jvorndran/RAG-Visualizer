@@ -116,7 +116,7 @@ def _extract_html_body(html_text: str) -> str:
     lower_text = html_text.lower()
     if "<html" in lower_text or "<!doctype" in lower_text or "<body" in lower_text:
         # Extract body content
-        body_match = re.search(r'<body[^>]*>(.*?)</body>', html_text, re.IGNORECASE | re.DOTALL)
+        body_match = re.search(r"<body[^>]*>(.*?)</body>", html_text, re.IGNORECASE | re.DOTALL)
         if body_match:
             return body_match.group(1).strip()
 
@@ -325,7 +325,8 @@ def render_chunk_cards(
                       Can be a list of single badges (dict) or a list of lists of badges.
                       Each badge dict keys: {"label": "Score", "value": "0.85", "color": "#..."}
         show_overlap: Whether to render overlap highlighting (default: True)
-        display_mode: Display style - "continuous" (colored flow) or "card" (individual cards with borders)
+        display_mode: Display style - "continuous" (colored flow) or "card" (individual
+            cards with borders)
         render_format: Chunk render format (markdown, html, doctags, json)
     """
     if not chunk_display_data:
@@ -347,7 +348,7 @@ def render_chunk_cards(
             chunk_text_stripped = display_text.strip()
             heading_stripped = str(meta["heading_text"]).strip()
             # Skip chunks that are just headers
-            if chunk_text_stripped == heading_stripped or chunk_text_stripped.endswith(heading_stripped):
+            if heading_stripped and chunk_text_stripped == heading_stripped:
                 is_header_only = True
 
         if not is_header_only:
@@ -389,7 +390,8 @@ def render_chunk_cards(
             'sans-serif; line-height: 1.6; color: #111;">'
         )
     # Add CSS for details/summary styling
-    chunks_html_parts.append("""
+    chunks_html_parts.append(
+        """
         <style>
             .chunk-details summary { cursor: pointer; list-style: none; }
             .chunk-details summary::-webkit-details-marker { display: none; }
@@ -475,7 +477,8 @@ def render_chunk_cards(
                 word-break: break-word;
             }
         </style>
-    """)
+    """
+    )
 
     normalized_format = (render_format or "markdown").strip().lower()
 
@@ -538,7 +541,8 @@ def render_chunk_cards(
                         chunks_html_parts.append(
                             f'<span style="background: {badge_color}; color: #374151; '
                             f"font-size: 0.65rem; padding: 1px 5px; border-radius: 8px; "
-                            f'user-select: none;">{html.escape(label)}: {html.escape(str(value))}</span>'
+                            f'user-select: none;">{html.escape(label)}: '
+                            f"{html.escape(str(value))}</span>"
                         )
 
         # Fallback badge when rendering from non-source text
@@ -605,10 +609,11 @@ def render_chunk_cards(
             main_html_content = _extract_html_body(main_text)
 
             if overlap_html_content and show_overlap:
-                # Wrap overlap portion with highlight styling (use span like markdown for inline flow)
+                # Wrap overlap portion with highlight styling.
                 overlap_highlighted = (
-                    f'<span style="background-color: rgba(156, 163, 175, 0.2); '
-                    f'border-left: 2px solid #9ca3af; padding-left: 4px;">{overlap_html_content}</span>'
+                    '<div style="background-color: rgba(156, 163, 175, 0.2); '
+                    "border-left: 2px solid #9ca3af; padding-left: 4px;"
+                    f'">{overlap_html_content}</div>'
                 )
                 rendered_html = overlap_highlighted + main_html_content
             else:
@@ -627,8 +632,9 @@ def render_chunk_cards(
                     )
                     # Wrap overlap in gray highlight
                     overlap_html = (
-                        f'<span style="background-color: rgba(156, 163, 175, 0.2); '
-                        f'border-left: 2px solid #9ca3af; padding-left: 4px;">{overlap_rendered}</span>'
+                        '<div style="background-color: rgba(156, 163, 175, 0.2); '
+                        "border-left: 2px solid #9ca3af; padding-left: 4px;"
+                        f'">{overlap_rendered}</div>'
                     )
                     main_rendered = markdown.markdown(
                         main_text,
@@ -662,7 +668,7 @@ def render_chunk_cards(
         chunks_html_parts.append(
             '<div style="text-align: center; margin-top: 6px;">'
             '<span class="chunk-expand-icon" style="font-size: 0.6rem;" '
-            'title="Click to show metadata">▼</span></div>'
+            'title="Click to show metadata">v</span></div>'
         )
 
         chunks_html_parts.append("</summary>")
@@ -722,7 +728,8 @@ def render_chunk_cards(
             sparse_pct = (sparse_score / total * 100) if total > 0 else 0
 
             chunks_html_parts.append(
-                '<div class="chunk-context-label" style="margin-top: 12px;">RRF Fusion Breakdown</div>'
+                '<div class="chunk-context-label" style="margin-top: 12px;">'
+                "RRF Fusion Breakdown</div>"
             )
             chunks_html_parts.append('<div style="font-size: 0.75rem; line-height: 1.5;">')
 
@@ -730,12 +737,14 @@ def render_chunk_cards(
             if dense_rank is not None:
                 chunks_html_parts.append(
                     f'<div style="margin-bottom: 8px;">'
-                    f'<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">'
+                    '<div style="display: flex; justify-content: space-between; '
+                    'margin-bottom: 2px;">'
                     f'<span style="color: #374151;">Dense (Semantic): Rank #{dense_rank}</span>'
                     f'<span style="color: #6b7280; font-family: monospace;">'
                     f"1/({rrf_k}+{dense_rank}) = {dense_score:.4f}</span>"
                     f"</div>"
-                    f'<div style="background: #e0e7ff; height: 8px; border-radius: 4px; overflow: hidden;">'
+                    '<div style="background: #e0e7ff; height: 8px; border-radius: 4px; '
+                    'overflow: hidden;">'
                     f'<div style="background: #4f46e5; height: 100%; width: {dense_pct}%;"></div>'
                     f"</div>"
                     f'<div style="color: #6b7280; font-size: 0.7rem; margin-top: 1px;">'
@@ -753,12 +762,14 @@ def render_chunk_cards(
             if sparse_rank is not None:
                 chunks_html_parts.append(
                     f'<div style="margin-bottom: 4px;">'
-                    f'<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">'
+                    '<div style="display: flex; justify-content: space-between; '
+                    'margin-bottom: 2px;">'
                     f'<span style="color: #374151;">Sparse (BM25): Rank #{sparse_rank}</span>'
                     f'<span style="color: #6b7280; font-family: monospace;">'
                     f"1/({rrf_k}+{sparse_rank}) = {sparse_score:.4f}</span>"
                     f"</div>"
-                    f'<div style="background: #fef3c7; height: 8px; border-radius: 4px; overflow: hidden;">'
+                    '<div style="background: #fef3c7; height: 8px; border-radius: 4px; '
+                    'overflow: hidden;">'
                     f'<div style="background: #f59e0b; height: 100%; width: {sparse_pct}%;"></div>'
                     f"</div>"
                     f'<div style="color: #6b7280; font-size: 0.7rem; margin-top: 1px;">'

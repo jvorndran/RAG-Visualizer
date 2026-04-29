@@ -10,6 +10,7 @@ from unravel.services.storage import (
     save_document,
 )
 from unravel.ui.constants import WidgetKeys
+from unravel.utils.ui import render_page_header, render_section_heading
 from unravel.utils.web_scraper import (
     crawl_url,
     generate_filename_from_url,
@@ -19,7 +20,7 @@ from unravel.utils.web_scraper import (
 
 @st.fragment
 def _render_url_scraping() -> None:
-    st.caption("Enter a URL to scrape and extract content")
+    st.caption("Enter a URL to scrape and extract content.")
 
     url_input = st.text_input(
         "URL",
@@ -28,13 +29,16 @@ def _render_url_scraping() -> None:
         label_visibility="collapsed",
     )
 
-    use_browser = st.checkbox(
+    use_browser = st.toggle(
         "Enable JavaScript rendering (slower)",
         value=False,
-        help="Use a headless browser (Chrome) to render JavaScript-heavy pages. This is slower but works with dynamic content.",
+        help=(
+            "Use a headless browser (Chrome) for JavaScript-heavy pages. "
+            "This is slower but works with dynamic content."
+        ),
     )
 
-    crawl_mode = st.checkbox(
+    crawl_mode = st.toggle(
         "Crawl multiple pages",
         value=False,
         help="Discover and scrape multiple pages from this site",
@@ -42,12 +46,15 @@ def _render_url_scraping() -> None:
 
     if crawl_mode:
         with st.container(border=True):
-            crawl_method = st.radio(
-                "Discovery Method",
+            crawl_method = st.segmented_control(
+                "Discovery method",
                 options=["Crawler", "Sitemap", "Feeds"],
+                default="Crawler",
                 key=WidgetKeys.UPLOAD_CRAWL_METHOD,
-                horizontal=True,
-                help="Crawler: follows internal links. Sitemap: uses sitemap.xml. Feeds: discovers articles from RSS/Atom feeds.",
+                help=(
+                    "Crawler: follows internal links. Sitemap: uses sitemap.xml. "
+                    "Feeds: discovers articles from RSS/Atom feeds."
+                ),
             )
 
             if crawl_method == "Sitemap":
@@ -55,7 +62,10 @@ def _render_url_scraping() -> None:
                     "Sitemap URL (optional)",
                     placeholder="e.g. https://example.com/en-us/sitemap.xml",
                     key=WidgetKeys.UPLOAD_CRAWL_SITEMAP_URL,
-                    help="Override the auto-detected sitemap location. Useful when the sitemap is at a non-standard path.",
+                    help=(
+                        "Override the auto-detected sitemap location. "
+                        "Useful when the sitemap is at a non-standard path."
+                    ),
                 )
             else:
                 sitemap_url_override = ""
@@ -89,11 +99,19 @@ def _render_url_scraping() -> None:
             meta_col1, meta_col2 = st.columns(2)
             with meta_col1:
                 meta_author = st.checkbox("Author", value=True, key=WidgetKeys.UPLOAD_META_AUTHOR)
-                meta_date = st.checkbox("Publication date", value=True, key=WidgetKeys.UPLOAD_META_DATE)
-                meta_description = st.checkbox("Description", value=False, key=WidgetKeys.UPLOAD_META_DESC)
+                meta_date = st.checkbox(
+                    "Publication date", value=True, key=WidgetKeys.UPLOAD_META_DATE
+                )
+                meta_description = st.checkbox(
+                    "Description", value=False, key=WidgetKeys.UPLOAD_META_DESC
+                )
             with meta_col2:
-                meta_tags = st.checkbox("Tags / categories", value=False, key=WidgetKeys.UPLOAD_META_TAGS)
-                meta_sitename = st.checkbox("Site name", value=False, key=WidgetKeys.UPLOAD_META_SITENAME)
+                meta_tags = st.checkbox(
+                    "Tags / categories", value=False, key=WidgetKeys.UPLOAD_META_TAGS
+                )
+                meta_sitename = st.checkbox(
+                    "Site name", value=False, key=WidgetKeys.UPLOAD_META_SITENAME
+                )
     else:
         crawl_method = "Crawler"
         max_pages = 10
@@ -107,26 +125,24 @@ def _render_url_scraping() -> None:
         meta_sitename = False
 
     with st.expander("Advanced Extraction Options"):
-        st.caption("Configure how content is extracted from the page")
+        st.caption("Configure how content is extracted from the page.")
 
         output_format = st.selectbox(
-            "Output Format",
+            "Output format",
             options=["Markdown", "TXT", "CSV", "JSON", "HTML", "XML", "XML-TEI"],
             index=0,
             help="Format for the extracted content",
         )
 
-       
-
-        extraction_mode = st.radio(
-            "Extraction Strategy",
-            options=["Balanced", "Favor Precision", "Favor Recall"],
-            index=0,
-            help="Balanced: Standard extraction. Precision: Less text but cleaner. Recall: More comprehensive text.",
-            horizontal=True,
+        extraction_mode = st.segmented_control(
+            "Extraction strategy",
+            options=["Balanced", "Precision", "Recall"],
+            default="Balanced",
+            help=(
+                "Balanced: standard extraction. Precision: less text but cleaner. "
+                "Recall: more comprehensive text."
+            ),
         )
-
-       
 
         col1, col2 = st.columns(2)
         with col1:
@@ -176,8 +192,8 @@ def _render_url_scraping() -> None:
             }
             trafilatura_format, file_ext = format_map[output_format]
 
-            favor_precision = extraction_mode == "Favor Precision"
-            favor_recall = extraction_mode == "Favor Recall"
+            favor_precision = extraction_mode == "Precision"
+            favor_recall = extraction_mode == "Recall"
 
             extraction_params = {
                 "output_format": trafilatura_format,
@@ -215,7 +231,7 @@ def _render_url_scraping() -> None:
                     failed_count = metadata.get("failed_count", 0)
                     if failed_count > 0:
                         crawl_status.update(
-                            label=f"Crawled {page_count} pages — {failed_count} failed",
+                            label=f"Crawled {page_count} pages - {failed_count} failed",
                             state="complete",
                         )
                     else:
@@ -289,6 +305,12 @@ def render_upload_step() -> None:
     if "document_metadata" not in st.session_state:
         st.session_state.document_metadata = None
 
+    render_page_header(
+        "Add source material",
+        "Upload a local document or scrape web content to seed the RAG pipeline.",
+        "Upload",
+    )
+
     # Check if stored document matches session state
     current_doc = get_current_document()
     if current_doc:
@@ -303,23 +325,21 @@ def render_upload_step() -> None:
 
     # Source selection (File Upload or URL Scraping)
     with st.container(border=True):
-        st.markdown("### Add Document")
+        render_section_heading("Add document")
 
         # In demo mode, show URL scraping only
         if is_demo_mode:
             _render_url_scraping()
         else:
             # In normal mode, allow choosing between file upload and URL scraping
-            source_mode = st.radio(
+            source_mode = st.segmented_control(
                 "Source",
-                options=["File Upload", "URL Scraping"],
-                horizontal=True,
+                options=["File upload", "URL scraping"],
+                default="File upload",
                 label_visibility="collapsed",
             )
 
-
-
-            if source_mode == "File Upload":
+            if source_mode == "File upload":
                 st.caption("Supported formats: PDF, DOCX, PPTX, XLSX, HTML, MD, TXT, PNG, JPG")
 
                 uploaded_file = st.file_uploader(
@@ -376,7 +396,10 @@ def render_upload_step() -> None:
                                 if key in st.session_state:
                                     del st.session_state[key]
 
-                            st.success(f"Uploaded: {uploaded_file.name}")
+                            st.success(
+                                f"Uploaded: {uploaded_file.name}",
+                                icon=":material/check_circle:",
+                            )
                             st.rerun()
                         except Exception as e:
                             st.error(f"Failed to upload {uploaded_file.name}: {str(e)}")
@@ -402,8 +425,8 @@ def render_upload_step() -> None:
     # Display current document
     metadata = st.session_state.document_metadata
     if metadata:
-       
-        st.markdown("### Current Document")
+
+        render_section_heading("Current document")
 
         with st.container(border=True):
             col1, col2 = st.columns([5, 1])
@@ -429,7 +452,8 @@ def render_upload_step() -> None:
                         failed_count = metadata.get("failed_count", 0)
                         if failed_count > 0:
                             st.caption(
-                                f"Crawled {page_count} pages via {metadata['crawl_method']} — {failed_count} failed"
+                                f"Crawled {page_count} pages via "
+                                f"{metadata['crawl_method']} - {failed_count} failed"
                             )
                         else:
                             st.caption(f"Crawled {page_count} pages via {metadata['crawl_method']}")
@@ -441,7 +465,8 @@ def render_upload_step() -> None:
                                         st.caption(f"[ok] {p.get('title') or p['url']}")
                                     else:
                                         st.caption(
-                                            f"[failed] {p['url']} — {p.get('reason', 'unknown error')}"
+                                            f"[failed] {p['url']} - "
+                                            f"{p.get('reason', 'unknown error')}"
                                         )
                     elif source_url:
                         display_url = (
@@ -472,4 +497,7 @@ def render_upload_step() -> None:
 
     else:
         if not is_demo_mode:
-            st.info("No document uploaded yet. Use the file uploader above to add a document.")
+            st.info(
+                "No document uploaded yet. Use the file uploader above to add a document.",
+                icon=":material/info:",
+            )

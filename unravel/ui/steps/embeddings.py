@@ -7,7 +7,6 @@ import streamlit_shadcn_ui as ui
 from numpy.typing import NDArray
 
 from unravel.services.chunking import get_chunks
-from unravel.ui.constants import WidgetKeys
 from unravel.services.embedders import (
     DEFAULT_MODEL,
     get_embedder,
@@ -27,11 +26,13 @@ from unravel.ui.components.chunk_viewer import (
     render_chunk_cards,
 )
 from unravel.ui.components.progress_bar import timed_progress_bar
+from unravel.ui.constants import WidgetKeys
 from unravel.utils.parsers import parse_document
 from unravel.utils.qdrant_manager import (
     get_qdrant_status,
     restart_qdrant_server,
 )
+from unravel.utils.ui import render_page_header, render_section_heading
 from unravel.utils.visualization import (
     cluster_embeddings,
     create_embedding_plot,
@@ -94,10 +95,10 @@ def render_embeddings_step() -> None:
     selected_model = st.session_state.get("embedding_model_name", DEFAULT_MODEL)
     selected_doc = doc_name  # Use doc_name from session state
 
-    # --- Main Header ---
-    st.markdown("## Embeddings & Similarity")
-    st.caption(
-        "Visualize how your document chunks are represented in vector space and test semantic search."
+    render_page_header(
+        "Embeddings & similarity",
+        "Visualize document chunks in vector space and test semantic search.",
+        "Vector embedding",
     )
 
     # --- Docker/Qdrant Requirement Check ---
@@ -105,8 +106,9 @@ def render_embeddings_step() -> None:
     if not qdrant_url:
         # Docker not available - block embeddings functionality
         with st.container(border=True):
-            st.error("**Docker Required for Embeddings**")
-            st.markdown("""
+            st.error("**Docker required for embeddings**", icon=":material/error:")
+            st.markdown(
+                """
                 This feature requires Qdrant vector database, which runs via Docker.
 
                 **To enable embeddings:**
@@ -115,7 +117,8 @@ def render_embeddings_step() -> None:
                 3. Refresh this page
 
                 The Chunks step still works without Docker.
-                """)
+                """
+            )
         return
 
     # --- Qdrant Status Header ---
@@ -140,14 +143,24 @@ def render_embeddings_step() -> None:
                     if is_cloud:
                         # Cloud mode: show status only, hide URL for security
                         st.markdown(
-                            "**Qdrant Status** &nbsp; <span style='color: #16a34a; background-color: #dcfce7; padding: 2px 8px; border-radius: 12px; font-size: 0.8em;'>Cloud</span>",
+                            "**Qdrant Status** &nbsp; "
+                            "<span style='color: #16a34a; background-color: #dcfce7; "
+                            "padding: 2px 8px; border-radius: 12px; font-size: 0.8em;'>"
+                            "Cloud</span>",
                             unsafe_allow_html=True,
                         )
                     else:
                         # Local mode: show URL and dashboard link
                         dashboard_url = url + "/dashboard"
                         st.markdown(
-                            f"**Qdrant Status** &nbsp; <span style='color: #16a34a; background-color: #dcfce7; padding: 2px 8px; border-radius: 12px; font-size: 0.8em;'>Running</span> &nbsp; <a href='{dashboard_url}' target='_blank' style='color: #4b5563; text-decoration: none; border-bottom: 1px dotted #9ca3af;'>{dashboard_url} ↗</a>",
+                            "**Qdrant Status** &nbsp; "
+                            "<span style='color: #16a34a; background-color: #dcfce7; "
+                            "padding: 2px 8px; border-radius: 12px; font-size: 0.8em;'>"
+                            "Running</span> &nbsp; "
+                            f"<a href='{dashboard_url}' target='_blank' "
+                            "style='color: #4b5563; text-decoration: none; "
+                            "border-bottom: 1px dotted #9ca3af;'>"
+                            f"{dashboard_url}</a>",
                             unsafe_allow_html=True,
                         )
             else:
@@ -157,14 +170,22 @@ def render_embeddings_step() -> None:
                     else "Connection lost"
                 )
                 st.markdown(
-                    f"**Qdrant Status** &nbsp; <span style='color: #dc2626; background-color: #fee2e2; padding: 2px 8px; border-radius: 12px; font-size: 0.8em;'>Stopped</span> &nbsp; <span style='color: #ef4444; font-size: 0.9em;'>{error_msg}</span>",
+                    "**Qdrant Status** &nbsp; "
+                    "<span style='color: #dc2626; background-color: #fee2e2; "
+                    "padding: 2px 8px; border-radius: 12px; font-size: 0.8em;'>"
+                    "Stopped</span> &nbsp; "
+                    f"<span style='color: #ef4444; font-size: 0.9em;'>{error_msg}</span>",
                     unsafe_allow_html=True,
                 )
 
         # Only show restart button for local Docker mode
         if not is_cloud:
             with col_action:
-                if st.button("Restart", key=WidgetKeys.EMBEDDINGS_RESTART_QDRANT_BTN, use_container_width=True):
+                if st.button(
+                    "Restart",
+                    key=WidgetKeys.EMBEDDINGS_RESTART_QDRANT_BTN,
+                    use_container_width=True,
+                ):
                     with st.spinner("..."):
                         try:
                             restart_qdrant_server()
@@ -177,25 +198,29 @@ def render_embeddings_step() -> None:
         if not is_running and qdrant_status.get("error"):
             error_text = str(qdrant_status["error"])
             st.markdown(
-                f"<div style='margin-top: 8px; font-size: 0.85em; color: #dc2626; background: #fef2f2; padding: 8px; border-radius: 4px; word-wrap: break-word; overflow-wrap: break-word;'>{error_text}</div>",
+                "<div style='margin-top: 8px; font-size: 0.85em; color: #dc2626; "
+                "background: #fef2f2; padding: 8px; border-radius: 4px; "
+                "word-wrap: break-word; overflow-wrap: break-word;'>"
+                f"{error_text}</div>",
                 unsafe_allow_html=True,
             )
 
         if is_running and qdrant_status.get("mount_type") == "bind":
             st.markdown(
-                "<div style='margin-top: 8px; font-size: 0.85em; color: #854d0e; background: #fef9c3; padding: 8px; border-radius: 4px;'>Performance Note: Using bind mount on Windows (slower I/O).</div>",
+                "<div style='margin-top: 8px; font-size: 0.85em; color: #854d0e; "
+                "background: #fef9c3; padding: 8px; border-radius: 4px;'>"
+                "Performance note: using bind mount on Windows (slower I/O).</div>",
                 unsafe_allow_html=True,
             )
-
-   
 
     # Check if document is selected
     if not selected_doc:
         st.info(
             "No document selected. Upload a file in the **Upload** step or select "
-            "a document in the sidebar (RAG Config tab)."
+            "a document in the sidebar.",
+            icon=":material/info:",
         )
-        if ui.button("Go to Upload Step", key=WidgetKeys.EMBEDDINGS_GOTO_UPLOAD):
+        if ui.button("Go to upload", key=WidgetKeys.EMBEDDINGS_GOTO_UPLOAD):
             st.session_state.current_step = "upload"
             st.rerun(scope="app")
         return
@@ -267,17 +292,17 @@ def render_embeddings_step() -> None:
             else:
                 st.warning("Selected document is empty.")
 
-   
-
     # --- Main Content Area ---
 
     # 1. Empty State Check
     chunks = st.session_state.get("chunks", [])
     if not chunks:
         st.info(
-            "👋 No chunks available. Configure document and chunking parameters in the sidebar (RAG Config tab), then go to the **Chunks** step to generate chunks."
+            "No chunks available. Configure document and chunking parameters, "
+            "then go to Text Splitting to generate chunks.",
+            icon=":material/info:",
         )
-        if ui.button("Go to Chunks Step", key=WidgetKeys.EMBEDDINGS_GOTO_CHUNKS):
+        if ui.button("Go to text splitting", key=WidgetKeys.EMBEDDINGS_GOTO_CHUNKS):
             st.session_state.current_step = "chunks"
             st.rerun(scope="app")
         return
@@ -348,13 +373,14 @@ def render_embeddings_step() -> None:
                     needs_regeneration = True
 
     if needs_regeneration:
-        
+
         # Estimate time
         est_time = estimate_embedding_time(selected_model, len(chunks))
 
         st.info(
             "Embeddings need to be generated for the current document and model. "
-            f"Estimated time: ~{est_time:.0f}s for {len(chunks)} chunks."
+            f"Estimated time: ~{est_time:.0f}s for {len(chunks)} chunks.",
+            icon=":material/info:",
         )
         if not st.button(
             "Generate embeddings",
@@ -363,20 +389,20 @@ def render_embeddings_step() -> None:
         ):
             return
 
-        def embedding_task(texts, model_name):
+        def embedding_task(texts: list[str], model_name: str):
             return generate_embeddings(texts, model_name)
 
         try:
             texts = [c.text for c in chunks]
-            
+
             # Use timed progress bar instead of spinner
             result = timed_progress_bar(
                 task=embedding_task,
                 args=(texts, selected_model),
                 label=f"Generating embeddings for {len(chunks)} chunks using {selected_model}...",
-                estimated_time=est_time
+                estimated_time=est_time,
             )
-            
+
             embeddings, dimension = result
 
             vector_store_path = get_storage_dir() / "session" / "current_vector_store"
@@ -387,16 +413,18 @@ def render_embeddings_step() -> None:
                 )
                 vector_store.clear()
             except RuntimeError as exc:
-                    # Docker/Qdrant not available
-                    st.error(str(exc))
-                    with st.expander("How to fix this"):
-                        st.markdown("""
+                # Docker/Qdrant not available
+                st.error(str(exc))
+                with st.expander("How to fix this"):
+                    st.markdown(
+                        """
                             1. Install Docker Desktop if not installed
                             2. Start Docker Desktop application
                             3. Wait for "Docker is running" status
                             4. Refresh this page
-                            """)
-                    return
+                            """
+                    )
+                return
 
             vector_store.add(embeddings, texts, metadata=[c.metadata for c in chunks])
 
@@ -513,7 +541,7 @@ def render_embeddings_step() -> None:
     reduced_embeddings, reducer = state_data["projections"][n_components]
 
     # If reducer is None (happens after loading from disk), refit it
-    # IMPORTANT: We must also use the newly reduced embeddings to keep chunks and query in the same space
+    # Use the newly reduced embeddings to keep chunks and query in the same space.
     if reducer is None and embeddings.shape[0] >= 5:
         with st.spinner("Refitting UMAP projection..."):
             new_reduced, new_reducer = reduce_dimensions(
@@ -544,8 +572,8 @@ def render_embeddings_step() -> None:
     cluster_labels = state_data["cluster_labels"]
 
     # Query Interface
-   
-    st.markdown("#### Semantic Search")
+
+    render_section_heading("Semantic search")
 
     # Streamlit reruns the script on every keystroke for text inputs.
     # Wrapping the input in a form prevents the expensive rerun until the user clicks Search.
@@ -557,7 +585,7 @@ def render_embeddings_step() -> None:
         with c1:
             query_text = st.text_input(
                 label="Query",
-                placeholder="e.g., What is the main challenge of RAG?",
+                placeholder="e.g., What is the main challenge of RAG",
                 key=WidgetKeys.EMBEDDINGS_QUERY_INPUT,
                 label_visibility="collapsed",
             )
@@ -647,14 +675,14 @@ def render_embeddings_step() -> None:
         help_text = (
             "Points: Each dot is a chunk. Colors represent semantic clusters. Pink Star = Query."
         )
-        st.markdown("##### Embedding Space (3D UMAP)", help=help_text)
+        st.markdown("##### Embedding space (3D UMAP)", help=help_text)
 
         # Prepare Data for Plotly
         df = pd.DataFrame(reduced_embeddings, columns=["x", "y", "z"])
         df["text_preview"] = [c.text[:150] + "..." for c in chunks]
         df["chunk_index"] = range(len(chunks))
         df["cluster_label"] = cluster_labels  # Numeric for color
-        df["Cluster"] = [f"Cluster {l}" for l in cluster_labels]  # String for hover
+        df["Cluster"] = [f"Cluster {label}" for label in cluster_labels]  # String for hover
 
         fig = create_embedding_plot(
             df,
@@ -670,8 +698,8 @@ def render_embeddings_step() -> None:
         st.plotly_chart(fig, width="stretch")
 
     # Nearest Neighbors Section
-   
-    st.markdown("##### Nearest Neighbors")
+
+    render_section_heading("Nearest neighbors")
     if neighbors:
         # Convert search results to chunks for the viewer
         from dataclasses import dataclass
@@ -745,4 +773,7 @@ def render_embeddings_step() -> None:
             display_mode="card",
         )
     else:
-        st.info("Enter a query above to see the most similar chunks here.")
+        st.info(
+            "Enter a query above to see the most similar chunks here.",
+            icon=":material/info:",
+        )

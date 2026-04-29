@@ -12,7 +12,6 @@ import streamlit as st
 import streamlit_shadcn_ui as ui
 
 from unravel.services.embedders import DEFAULT_MODEL, get_embedder
-from unravel.ui.constants import WidgetKeys, get_threshold_slider_key
 from unravel.services.llm import (
     DEFAULT_QUERY_REWRITE_PROMPT,
     DEFAULT_SYSTEM_PROMPT,
@@ -27,6 +26,9 @@ from unravel.ui.components.chunk_viewer import (
     prepare_chunk_display_data,
     render_chunk_cards,
 )
+from unravel.ui.constants import WidgetKeys, get_threshold_slider_key
+from unravel.utils.ui import render_page_header, render_section_heading
+
 
 def _render_model_response(text: str) -> None:
     answer = strip_think_blocks(text)
@@ -104,31 +106,39 @@ def _render_api_key_setup_message(provider: str, env_key_name: str) -> None:
         env_key_name: Environment variable name for the API key
     """
     with st.container(border=True):
-        st.markdown("### API Key Required")
+        render_section_heading("API key required")
         st.markdown(
             f"To use **{provider}** for answer generation, you need to configure your API key."
         )
 
-       
-        st.markdown("**Setup Steps:**")
-        st.markdown(f"""
+        st.markdown("**Setup steps**")
+        st.markdown(
+            f"""
             1. Click the button below to open the configuration folder
             2. Edit the `.env` file in a text editor
             3. Add your API key: `{env_key_name}=your-key-here`
             4. Save the file and refresh this page
-            """)
+            """
+        )
 
-       
         col1, col2 = st.columns([1, 2])
         with col1:
-            if ui.button("Open Config Folder", variant="secondary", key=WidgetKeys.QUERY_OPEN_CONFIG_FOLDER_BTN):
+            if ui.button(
+                "Open config folder",
+                variant="secondary",
+                key=WidgetKeys.QUERY_OPEN_CONFIG_FOLDER_BTN,
+            ):
                 _ensure_env_file_exists()
                 _open_folder_in_explorer(get_storage_dir())
-                st.success("✓ Folder opened! Edit the .env file and refresh.")
+                st.success(
+                    "Folder opened. Edit the .env file and refresh.",
+                    icon=":material/check_circle:",
+                )
 
         with col2:
             st.caption(
-                f"The folder contains a `.env` file where you can securely store your {provider} API key."
+                f"The folder contains a `.env` file where you can securely store your "
+                f"{provider} API key."
             )
 
 
@@ -142,13 +152,13 @@ def _get_embeddings_data() -> dict[str, Any] | None:
 def _render_empty_state() -> None:
     """Render the empty state when no embeddings are available."""
     with st.container(border=True):
-        st.markdown("### No embeddings found")
+        render_section_heading("No embeddings found")
         st.caption(
-            "Please go to the Embeddings step to generate vector representations of your document chunks first."
+            "Please go to the Embeddings step to generate vector representations "
+            "of your document chunks first."
         )
 
-       
-        if ui.button("Go to Embeddings Step", key=WidgetKeys.QUERY_GOTO_EMBEDDINGS):
+        if ui.button("Go to embeddings", key=WidgetKeys.QUERY_GOTO_EMBEDDINGS):
             st.session_state.current_step = "embeddings"
             st.rerun(scope="app")
 
@@ -158,7 +168,7 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
     if not results:
         return
 
-    st.markdown(f"#### Retrieved Context ({len(results)} chunks)")
+    render_section_heading(f"Retrieved context ({len(results)} chunks)")
 
     # Convert search results to chunks for the viewer
     from dataclasses import dataclass
@@ -238,7 +248,7 @@ def _render_query_variations(variations: list[str]) -> None:
         return
 
     with st.container(border=True):
-        st.markdown(f"#### Query Variations ({len(variations)})")
+        render_section_heading(f"Query variations ({len(variations)})")
         for variation in variations:
             st.markdown(f"- {variation}")
         st.caption("Retrieved chunks are the union of results from all variations.")
@@ -287,7 +297,9 @@ def _save_query_settings() -> None:
                 # Query step settings (use the actual stored values, not widget keys)
                 "query_top_k": st.session_state.get("query_top_k"),
                 "query_threshold": st.session_state.get("query_threshold"),
-                "query_expansion_enabled": st.session_state.get(WidgetKeys.QUERY_EXPANSION_ENABLED, False),
+                "query_expansion_enabled": st.session_state.get(
+                    WidgetKeys.QUERY_EXPANSION_ENABLED, False
+                ),
                 "query_expansion_count": st.session_state.get(WidgetKeys.QUERY_EXPANSION_COUNT, 4),
                 "query_rewrite_prompt": st.session_state.get(WidgetKeys.QUERY_REWRITE_PROMPT, ""),
                 "query_system_prompt": st.session_state.get(WidgetKeys.QUERY_SYSTEM_PROMPT, ""),
@@ -400,11 +412,11 @@ def render_query_step() -> None:
                 # Port is not in use, server is not running
                 st.session_state.api_endpoint_enabled = False
 
-    # === Header & Metrics ===
-    st.subheader("Query & Retrieval")
-    st.caption("Test your RAG pipeline with real-time retrieval and generation.")
-
-   
+    render_page_header(
+        "Query & retrieval",
+        "Test your RAG pipeline with real-time retrieval and answer generation.",
+        "Response generation",
+    )
 
     # === Check API Key Configuration ===
     provider = st.session_state.get("llm_provider", "OpenAI")
@@ -418,8 +430,6 @@ def render_query_step() -> None:
         if not api_key:
             _render_api_key_setup_message(provider, env_key_name)
             return
-
-
 
     # === Query Input Section ===
     with st.container(border=True):
@@ -435,16 +445,21 @@ def render_query_step() -> None:
         with col_btn:
             # Add spacing to align with text input label
             st.markdown('<div style="margin-top: 29px;"></div>', unsafe_allow_html=True)
-            ask_clicked = st.button("Ask", type="primary", key=WidgetKeys.QUERY_ASK_BUTTON, width="stretch")
+            ask_clicked = st.button(
+                "Ask",
+                type="primary",
+                key=WidgetKeys.QUERY_ASK_BUTTON,
+                use_container_width=True,
+            )
 
         # Configuration
-        with st.expander("Retrieval Settings", expanded=False):
+        with st.expander("Retrieval settings", expanded=False, icon=":material/tune:"):
             col_k, col_threshold = st.columns(2)
             with col_k:
                 # Use saved value if available
                 default_top_k = st.session_state.get("query_top_k", min(5, vector_store.size))
                 top_k = st.slider(
-                    "Top K Results",
+                    "Top K results",
                     min_value=1,
                     max_value=min(20, vector_store.size),
                     value=min(default_top_k, vector_store.size),
@@ -468,7 +483,7 @@ def render_query_step() -> None:
                     )
 
                 # Strategy-specific threshold defaults and ranges
-                THRESHOLD_CONFIG = {
+                threshold_config = {
                     "DenseRetriever": {
                         "default": 0.3,
                         "min": 0.0,
@@ -494,10 +509,10 @@ def render_query_step() -> None:
 
                 # Get appropriate threshold config
                 if retrieval_strategy == "HybridRetriever":
-                    threshold_cfg = THRESHOLD_CONFIG[retrieval_strategy][fusion_method]
+                    threshold_cfg = threshold_config[retrieval_strategy][fusion_method]
                 else:
-                    threshold_cfg = THRESHOLD_CONFIG.get(
-                        retrieval_strategy, THRESHOLD_CONFIG["DenseRetriever"]
+                    threshold_cfg = threshold_config.get(
+                        retrieval_strategy, threshold_config["DenseRetriever"]
                     )
 
                 # Use strategy and fusion method in key to make slider reactive to changes
@@ -509,24 +524,30 @@ def render_query_step() -> None:
                 # Use saved value if available and matches current strategy
                 saved_threshold = st.session_state.get("query_threshold")
                 default_threshold = threshold_cfg["default"]
-                if saved_threshold is not None and st.session_state.get("last_threshold_strategy") == strategy_key:
+                if (
+                    saved_threshold is not None
+                    and st.session_state.get("last_threshold_strategy") == strategy_key
+                ):
                     default_threshold = saved_threshold
 
                 threshold = st.slider(
-                    "Minimum Similarity Score",
+                    "Minimum similarity score",
                     min_value=threshold_cfg["min"],
                     max_value=threshold_cfg["max"],
                     value=default_threshold,
                     step=threshold_cfg["step"],
                     key=get_threshold_slider_key(retrieval_strategy, fusion_method),
-                    help=f"Filter results below this threshold ({retrieval_strategy}{', ' + fusion_method if fusion_method else ''})",
+                    help=(
+                        "Filter results below this threshold "
+                        f"({retrieval_strategy}{', ' + fusion_method if fusion_method else ''})"
+                    ),
                 )
                 # Store in session state for persistence
                 st.session_state.query_threshold = threshold
                 st.session_state.last_threshold_strategy = strategy_key
 
-        with st.expander("Query Expansion", expanded=False):
-            enable_query_expansion = st.checkbox(
+        with st.expander("Query expansion", expanded=False, icon=":material/auto_awesome:"):
+            enable_query_expansion = st.toggle(
                 "Generate query variations with the LLM",
                 value=False,
                 key=WidgetKeys.QUERY_EXPANSION_ENABLED,
@@ -540,7 +561,7 @@ def render_query_step() -> None:
                 key=WidgetKeys.QUERY_EXPANSION_COUNT,
             )
             rewrite_prompt = st.text_area(
-                "Rewrite Prompt",
+                "Rewrite prompt",
                 value=st.session_state.get(
                     WidgetKeys.QUERY_REWRITE_PROMPT,
                     DEFAULT_QUERY_REWRITE_PROMPT,
@@ -550,9 +571,9 @@ def render_query_step() -> None:
                 help="Prompt used to generate query variations for retrieval.",
             )
 
-        with st.expander("System Prompt", expanded=False):
+        with st.expander("System prompt", expanded=False, icon=":material/article:"):
             query_system_prompt = st.text_area(
-                "System Prompt",
+                "System prompt",
                 value=st.session_state.get(WidgetKeys.QUERY_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT),
                 height=150,
                 key=WidgetKeys.QUERY_SYSTEM_PROMPT,
@@ -575,13 +596,10 @@ def render_query_step() -> None:
         from unravel.services.api_server import update_pipeline_state
 
         llm_config, system_prompt = _get_llm_config_from_sidebar()
-        retrieval_config = st.session_state.get("retrieval_config", {
-            "strategy": "DenseRetriever",
-            "params": {}
-        })
-        reranking_config = st.session_state.get("reranking_config", {
-            "enabled": False
-        })
+        retrieval_config = st.session_state.get(
+            "retrieval_config", {"strategy": "DenseRetriever", "params": {}}
+        )
+        reranking_config = st.session_state.get("reranking_config", {"enabled": False})
         bm25_data = st.session_state.get("bm25_index_data")
 
         # Get current slider values for API
@@ -620,9 +638,7 @@ def render_query_step() -> None:
     }
     query_params_changed = False
     if st.session_state.current_query:
-        query_params_changed = (
-            st.session_state.get("last_query_settings") != current_query_settings
-        )
+        query_params_changed = st.session_state.get("last_query_settings") != current_query_settings
 
     if query_params_changed:
         st.info("Query settings changed. Click Ask to run the query with the new settings.")
@@ -713,7 +729,8 @@ def render_query_step() -> None:
                             st.session_state["bm25_index_data"] = bm25_data
                         except Exception as e:
                             st.warning(
-                                f"Failed to build BM25 index: {str(e)}. Falling back to dense retrieval."
+                                f"Failed to build BM25 index: {str(e)}. "
+                                "Falling back to dense retrieval."
                             )
                             retrieval_config = {
                                 "strategy": "DenseRetriever",
@@ -783,9 +800,9 @@ def render_query_step() -> None:
             st.session_state.last_search_results = search_results
 
         # Prepare containers for layout: Response (top) -> Chunks (bottom)
-       
+
         response_container = st.container()
-       
+
         chunks_container = st.container()
 
         # Display retrieved chunks immediately in the bottom container
@@ -795,13 +812,13 @@ def render_query_step() -> None:
             else:
                 st.warning(
                     "No chunks found matching the similarity threshold. "
-                    "Try lowering the Minimum Score or rephrasing your query."
+                    "Try lowering the minimum score or rephrasing your query."
                 )
                 return  # Stop if no context
 
         # Step 2: Generate response with retrieved chunks in the top container
         with response_container:
-            st.markdown("#### Model Response")
+            render_section_heading("Model response")
 
             # Use a nice card for the response
             with st.container(border=True):
@@ -834,7 +851,7 @@ def render_query_step() -> None:
                             # If we have a complete response, filter and stream the answer only.
                             # This keeps behavior simple and avoids showing any <think> blocks.
                             visible_answer = strip_think_blocks(raw_response)
-                            answer_placeholder.markdown(visible_answer + "▌")
+                            answer_placeholder.markdown(visible_answer + "|")
 
                     # Final render (answer only).
                     answer_placeholder.empty()
@@ -859,12 +876,11 @@ def render_query_step() -> None:
             _render_query_variations(st.session_state.last_query_variations)
 
         # Show previous response first
-       
+
         if st.session_state.current_response:
-            st.markdown("#### Model Response")
+            render_section_heading("Model response")
             with st.container(border=True):
                 _render_model_response(st.session_state.current_response)
-           
 
         # Show previous chunks below
         if "last_search_results" in st.session_state:
