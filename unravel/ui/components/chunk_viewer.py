@@ -348,9 +348,7 @@ def render_chunk_cards(
             chunk_text_stripped = display_text.strip()
             heading_stripped = str(meta["heading_text"]).strip()
             # Skip chunks that are just headers
-            if chunk_text_stripped == heading_stripped or chunk_text_stripped.endswith(
-                heading_stripped
-            ):
+            if heading_stripped and chunk_text_stripped == heading_stripped:
                 is_header_only = True
 
         if not is_header_only:
@@ -613,9 +611,9 @@ def render_chunk_cards(
             if overlap_html_content and show_overlap:
                 # Wrap overlap portion with highlight styling.
                 overlap_highlighted = (
-                    f'<span style="background-color: rgba(156, 163, 175, 0.2); '
+                    '<div style="background-color: rgba(156, 163, 175, 0.2); '
                     "border-left: 2px solid #9ca3af; padding-left: 4px;"
-                    f'">{overlap_html_content}</span>'
+                    f'">{overlap_html_content}</div>'
                 )
                 rendered_html = overlap_highlighted + main_html_content
             else:
@@ -634,9 +632,9 @@ def render_chunk_cards(
                     )
                     # Wrap overlap in gray highlight
                     overlap_html = (
-                        f'<span style="background-color: rgba(156, 163, 175, 0.2); '
+                        '<div style="background-color: rgba(156, 163, 175, 0.2); '
                         "border-left: 2px solid #9ca3af; padding-left: 4px;"
-                        f'">{overlap_rendered}</span>'
+                        f'">{overlap_rendered}</div>'
                     )
                     main_rendered = markdown.markdown(
                         main_text,

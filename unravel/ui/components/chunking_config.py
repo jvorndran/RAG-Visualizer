@@ -477,45 +477,15 @@ def render_chunking_configuration() -> tuple[dict, dict, bool]:
 
     if selected_tab == "Document":
         document_params = _render_document_tab(current_parsing_params)
+        new_parsing_params = current_parsing_params.copy()
         new_parsing_params.update(document_params)
-        # Preserve content tab params from current state
-        new_parsing_params["docling_filter_labels"] = current_parsing_params.get(
-            "docling_filter_labels", ["PAGE_HEADER", "PAGE_FOOTER"]
-        )
-        new_parsing_params["docling_extract_images"] = current_parsing_params.get(
-            "docling_extract_images", False
-        )
-        new_parsing_params["docling_enable_captioning"] = current_parsing_params.get(
-            "docling_enable_captioning", False
-        )
-        new_parsing_params["docling_use_native_description"] = current_parsing_params.get(
-            "docling_use_native_description", False
-        )
         # Preserve chunking params
         new_chunking_params = current_chunking_params.copy()
 
     elif selected_tab == "Content":
         content_params = _render_content_tab(current_parsing_params)
+        new_parsing_params = current_parsing_params.copy()
         new_parsing_params.update(content_params)
-        # Preserve document tab params from current state
-        new_parsing_params["output_format"] = current_parsing_params.get(
-            "output_format", "markdown"
-        )
-        new_parsing_params["docling_device"] = current_parsing_params.get("docling_device", "auto")
-        new_parsing_params["docling_enable_ocr"] = current_parsing_params.get(
-            "docling_enable_ocr", False
-        )
-        new_parsing_params["docling_table_structure"] = current_parsing_params.get(
-            "docling_table_structure", True
-        )
-        new_parsing_params["docling_threads"] = current_parsing_params.get("docling_threads", 4)
-        new_parsing_params["enable_table_merging"] = current_parsing_params.get(
-            "enable_table_merging", True
-        )
-        new_parsing_params["enable_table_reconstruction"] = current_parsing_params.get(
-            "enable_table_reconstruction", True
-        )
-        new_parsing_params["max_pages"] = current_parsing_params.get("max_pages", 50)
         # Preserve chunking params
         new_chunking_params = current_chunking_params.copy()
 

@@ -1,3 +1,5 @@
+from html import escape
+
 import streamlit as st
 import streamlit_shadcn_ui as ui
 
@@ -259,12 +261,12 @@ def apply_custom_styles() -> None:
 
 def render_page_header(title: str, caption: str, eyebrow: str | None = None) -> None:
     """Render a consistent page header."""
-    eyebrow_html = f'<div class="page-eyebrow">{eyebrow}</div>' if eyebrow else ""
+    eyebrow_html = f'<div class="page-eyebrow">{escape(eyebrow)}</div>' if eyebrow else ""
     st.markdown(
         f"""<div class="page-header">
 {eyebrow_html}
-<h1 class="page-title">{title}</h1>
-<div class="page-caption">{caption}</div>
+<h1 class="page-title">{escape(title)}</h1>
+<div class="page-caption">{escape(caption)}</div>
 </div>""",
         unsafe_allow_html=True,
     )
@@ -272,10 +274,10 @@ def render_page_header(title: str, caption: str, eyebrow: str | None = None) -> 
 
 def render_section_heading(title: str, caption: str | None = None) -> None:
     """Render a compact section heading."""
-    caption_html = f'<div class="section-caption">{caption}</div>' if caption else ""
+    caption_html = f'<div class="section-caption">{escape(caption)}</div>' if caption else ""
     st.markdown(
         f"""<div class="section-heading">
-<div class="section-title">{title}</div>
+<div class="section-title">{escape(title)}</div>
 {caption_html}
 </div>""",
         unsafe_allow_html=True,

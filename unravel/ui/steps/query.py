@@ -446,7 +446,10 @@ def render_query_step() -> None:
             # Add spacing to align with text input label
             st.markdown('<div style="margin-top: 29px;"></div>', unsafe_allow_html=True)
             ask_clicked = st.button(
-                "Ask", type="primary", key=WidgetKeys.QUERY_ASK_BUTTON, width="stretch"
+                "Ask",
+                type="primary",
+                key=WidgetKeys.QUERY_ASK_BUTTON,
+                use_container_width=True,
             )
 
         # Configuration
