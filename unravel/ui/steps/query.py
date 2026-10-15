@@ -20,12 +20,14 @@ from unravel.services.llm import (
     get_model,
     strip_think_blocks,
 )
+from unravel.services.retrieval.comparison import snapshot_retrieval
 from unravel.services.storage import get_storage_dir, save_session_state
 from unravel.ui.components.api_endpoint import render_api_endpoint_expander
 from unravel.ui.components.chunk_viewer import (
     prepare_chunk_display_data,
     render_chunk_cards,
 )
+from unravel.ui.components.retrieval_comparison import render_retrieval_comparison
 from unravel.ui.constants import WidgetKeys, get_threshold_slider_key
 from unravel.utils.ui import render_page_header, render_section_heading
 
@@ -165,6 +167,12 @@ def _render_empty_state() -> None:
 
 def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> None:
     """Render retrieved chunks using the chunk viewer component."""
+    current_snapshot = st.session_state.get("last_retrieval_snapshot") or snapshot_retrieval(
+        st.session_state.get("current_query") or "",
+        results or [],
+        st.session_state.get("last_query_settings") or {},
+    )
+    render_retrieval_comparison(current_snapshot)
     if not results:
         return
 
@@ -778,6 +786,7 @@ def render_query_step() -> None:
                 if isinstance(reranking_config_raw, dict)
                 else {"enabled": False}
             )
+            reranking_applied = False
             if reranking_config.get("enabled", False) and search_results:
                 with st.spinner("Reranking results..."):
                     try:
@@ -789,6 +798,7 @@ def render_query_step() -> None:
                         search_results = rerank_results(
                             query_text.strip(), search_results, rerank_cfg
                         )
+                        reranking_applied = True
                     except ImportError:
                         st.warning(
                             "FlashRank not installed. Install with: pip install unravel[reranking]"
@@ -798,6 +808,15 @@ def render_query_step() -> None:
 
             # Store for later display
             st.session_state.last_search_results = search_results
+            st.session_state.last_retrieval_snapshot = snapshot_retrieval(
+                query_text.strip(),
+                search_results,
+                {
+                    **current_query_settings,
+                    "retrieval_config": retrieval_config,
+                    "reranking_config": {**reranking_config, "enabled": reranking_applied},
+                },
+            )
 
         # Prepare containers for layout: Response (top) -> Chunks (bottom)
 
@@ -810,6 +829,7 @@ def render_query_step() -> None:
             if search_results:
                 _render_retrieved_chunks(search_results)
             else:
+                _render_retrieved_chunks([])
                 st.warning(
                     "No chunks found matching the similarity threshold. "
                     "Try lowering the minimum score or rephrasing your query."
