@@ -178,6 +178,23 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
 
     render_section_heading(f"Retrieved context ({len(results)} chunks)")
 
+    search_text = st.text_input(
+        "Find in retrieved context",
+        key="retrieved_context_search",
+        placeholder="Search chunk text...",
+        help="Case-insensitive text search within this run. Filters the displayed cards only; "
+        "the answer and pinned comparison retain the complete retrieved context.",
+    ).strip().casefold()
+    ranked_results = [
+        (rank, result)
+        for rank, result in enumerate(results, 1)
+        if not search_text or search_text in result.text.casefold()
+    ]
+    st.caption(f"Showing {len(ranked_results)} of {len(results)} retrieved chunks.")
+    if not ranked_results:
+        st.info("No retrieved chunks match this text. Clear the search to show all context.")
+        return
+
     # Convert search results to chunks for the viewer
     from dataclasses import dataclass
 
@@ -194,10 +211,10 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
         ChunkAdapter(
             text=res.text,
             metadata=res.metadata,
-            start_index=i,
-            end_index=i,
+            start_index=rank - 1,
+            end_index=rank - 1,
         )
-        for i, res in enumerate(results)
+        for rank, res in ranked_results
     ]
 
     # Prepare display data
@@ -207,18 +224,20 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
         calculate_overlap=False,
     )
 
-    custom_badges: list[list[dict[str, Any]]] | None = None
-    if show_scores:
-        custom_badges = []
-        for res in results:
+    custom_badges: list[list[dict[str, Any]]] = []
+    for rank, res in ranked_results:
+        badges: list[dict[str, Any]] = [
+            {"label": "Rank", "value": str(rank), "color": "#e2e8f0"}
+        ]
+        if show_scores:
             base_score = res.metadata.get("original_score", res.score)
-            badges: list[dict[str, Any]] = [
+            badges.append(
                 {
                     "label": "Score",
                     "value": f"{base_score:.4f}",
                     "color": "#d1fae5",
                 }
-            ]
+            )
 
             dense_rrf_contribution = res.metadata.get("dense_rrf_contribution")
             if dense_rrf_contribution is not None:
@@ -240,7 +259,7 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
                     }
                 )
 
-            custom_badges.append(badges)
+        custom_badges.append(badges)
 
     # Render using the reusable component in card mode
     render_chunk_cards(
@@ -248,6 +267,7 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
         custom_badges=custom_badges,
         show_overlap=False,
         display_mode="card",
+        hide_header_only=False,
     )
 
 
