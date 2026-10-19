@@ -28,6 +28,7 @@ from unravel.ui.components.chunk_viewer import (
     render_chunk_cards,
 )
 from unravel.ui.components.retrieval_comparison import render_retrieval_comparison
+from unravel.ui.components.retrieval_export import render_retrieval_export
 from unravel.ui.constants import WidgetKeys, get_threshold_slider_key
 from unravel.utils.ui import render_page_header, render_section_heading
 
@@ -173,6 +174,7 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
         st.session_state.get("last_query_settings") or {},
     )
     render_retrieval_comparison(current_snapshot)
+    render_retrieval_export(current_snapshot)
     if not results:
         return
 

@@ -87,3 +87,12 @@ def test_query_view_supports_results_created_before_snapshot_tracking():
     baseline = app.session_state["retrieval_comparison_baseline"]
     assert baseline.query == "pending query"
     assert baseline.chunks[0].text == "context"
+
+
+def test_query_view_offers_experiment_download_alongside_baseline_controls():
+    app = AppTest.from_string(QUERY_APP).run(timeout=45)
+    assert not app.exception
+    assert app.get("download_button")[0].label == "Download retrieval experiment"
+    app.button(key="retrieval_comparison_pin").click().run()
+    assert not app.exception
+    assert len(app.get("download_button")) == 1
