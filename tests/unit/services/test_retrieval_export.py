@@ -4,11 +4,13 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from unravel.services.retrieval.comparison import snapshot_retrieval
+from unravel.services.retrieval.comparison import RetrievalSnapshot, snapshot_retrieval
 from unravel.services.retrieval.export import serialize_retrieval_experiment
 
 
-def snapshot(query="Why café?", text="Full context\n" + "é" * 500):
+def snapshot(
+    query: str = "Why café?", text: str = "Full context\n" + "é" * 500
+) -> RetrievalSnapshot:
     return snapshot_retrieval(
         query,
         [SimpleNamespace(index=7, text=text, score=0.123456789, metadata={"secret": "hidden"})],
@@ -20,7 +22,7 @@ def snapshot(query="Why café?", text="Full context\n" + "é" * 500):
     )
 
 
-def test_export_preserves_full_text_scores_and_executed_settings_without_mutation():
+def test_export_preserves_full_text_scores_and_executed_settings_without_mutation() -> None:
     current = snapshot()
     document = serialize_retrieval_experiment(current)
     payload = json.loads(document)
@@ -39,7 +41,7 @@ def test_export_preserves_full_text_scores_and_executed_settings_without_mutatio
     assert serialize_retrieval_experiment(current) == document
 
 
-def test_export_includes_pinned_run_and_comparison_for_an_empty_current_run():
+def test_export_includes_pinned_run_and_comparison_for_an_empty_current_run() -> None:
     baseline = snapshot()
     current = snapshot_retrieval("no matches", [], {"top_k": 2})
     payload = json.loads(serialize_retrieval_experiment(current, baseline))
@@ -48,7 +50,7 @@ def test_export_includes_pinned_run_and_comparison_for_an_empty_current_run():
     assert payload["comparison"][0]["Change"] == "Removed"
 
 
-def test_download_uses_supplied_snapshot_and_keeps_session_settings_out():
+def test_download_uses_supplied_snapshot_and_keeps_session_settings_out() -> None:
     from unravel.ui.components.retrieval_export import render_retrieval_export
 
     current = snapshot()
@@ -62,7 +64,7 @@ def test_download_uses_supplied_snapshot_and_keeps_session_settings_out():
         assert json.loads(kwargs["data"])["baseline"]["query"] == "baseline"
 
 
-def test_no_download_before_any_run():
+def test_no_download_before_any_run() -> None:
     from unravel.ui.components.retrieval_export import render_retrieval_export
 
     with patch("unravel.ui.components.retrieval_export.st") as streamlit:
@@ -70,7 +72,7 @@ def test_no_download_before_any_run():
         streamlit.download_button.assert_not_called()
 
 
-def test_export_is_strict_json_for_unavailable_measurements():
+def test_export_is_strict_json_for_unavailable_measurements() -> None:
     current = snapshot_retrieval(
         "query", [SimpleNamespace(index=0, text="context", score=float("nan"))],
         {"threshold": float("inf")},
@@ -81,7 +83,7 @@ def test_export_is_strict_json_for_unavailable_measurements():
     assert payload["comparison"][0]["Current score"] is None
 
 
-def test_export_captures_executed_fusion_expansion_and_reranking_settings():
+def test_export_captures_executed_fusion_expansion_and_reranking_settings() -> None:
     settings = {
         "enable_query_expansion": True, "variation_count": 3,
         "rewrite_prompt": "Rewrite {query}",
@@ -111,7 +113,7 @@ def test_export_captures_executed_fusion_expansion_and_reranking_settings():
     assert "excluded" not in serialize_retrieval_experiment(current)
 
 
-def test_export_captures_effective_defaults_and_original_scores():
+def test_export_captures_effective_defaults_and_original_scores() -> None:
     current = snapshot_retrieval("q", [SimpleNamespace(
         index=1, text="evidence", score=0.99,
         metadata={"original_score": 0.0123456789, "secret": "excluded"},
@@ -128,3 +130,34 @@ def test_export_captures_effective_defaults_and_original_scores():
     assert execution["query_rrf_k"] is None
     assert execution["reranker_top_n"] == 5
     assert "excluded" not in serialize_retrieval_experiment(current)
+
+
+def test_export_preserves_retrieval_score_after_expansion_and_reranking() -> None:
+    from unravel.services.retrieval.reranking import RerankerConfig, rerank_results
+    from unravel.services.vector_store import SearchResult
+    from unravel.ui.steps.query import _merge_search_results
+
+    raw = SearchResult(index=7, text="context", score=0.8123456789, metadata={})
+    expanded = _merge_search_results([[raw], [raw]])
+    with patch("unravel.services.retrieval.reranking_backends.get_backend") as backend:
+        backend.return_value.rerank.return_value = [{"id": 0, "score": 0.95}]
+        reranked = rerank_results("q", expanded, RerankerConfig(enabled=True))
+    payload = json.loads(serialize_retrieval_experiment(snapshot_retrieval("q", reranked, {})))
+    assert payload["current"]["chunks"][0]["original_score"] == raw.score
+    assert payload["current"]["chunks"][0]["score"] == 0.95
+    assert raw.score == 0.8123456789
+    assert expanded[0].score != raw.score
+
+
+def test_export_accepts_numpy_scores_returned_by_flashrank() -> None:
+    import numpy as np
+
+    from unravel.services.retrieval.reranking import RerankerConfig, rerank_results
+    from unravel.services.vector_store import SearchResult
+
+    raw = SearchResult(index=7, text="context", score=0.8, metadata={})
+    with patch("unravel.services.retrieval.reranking_backends.get_backend") as backend:
+        backend.return_value.rerank.return_value = [{"id": 0, "score": np.float32(0.95)}]
+        reranked = rerank_results("q", [raw], RerankerConfig(enabled=True))
+    payload = json.loads(serialize_retrieval_experiment(snapshot_retrieval("q", reranked, {})))
+    assert payload["current"]["chunks"][0]["score"] == float(np.float32(0.95))

@@ -89,7 +89,7 @@ def test_query_view_supports_results_created_before_snapshot_tracking():
     assert baseline.chunks[0].text == "context"
 
 
-def test_query_view_offers_experiment_download_alongside_baseline_controls():
+def test_query_view_offers_experiment_download_alongside_baseline_controls() -> None:
     app = AppTest.from_string(QUERY_APP).run(timeout=45)
     assert not app.exception
     assert app.get("download_button")[0].label == "Download retrieval experiment"

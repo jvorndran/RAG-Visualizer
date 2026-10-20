@@ -760,9 +760,11 @@ def render_query_step() -> None:
                 )
 
             # Retrieve (multi-query)
+            queries_searched = []
             try:
                 results_by_query = []
                 for query in queries_to_search:
+                    queries_searched.append(query)
                     query_results = retrieve(
                         query=query,
                         vector_store=vector_store,
@@ -816,7 +818,7 @@ def render_query_step() -> None:
                 {
                     **current_query_settings,
                     "query_variations": query_variations,
-                    "queries_searched": queries_to_search,
+                    "queries_searched": queries_searched,
                     "retrieval_config": retrieval_config,
                     "reranking_config": {**reranking_config, "enabled": reranking_applied},
                 },
