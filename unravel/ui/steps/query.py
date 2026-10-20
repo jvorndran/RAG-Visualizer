@@ -815,6 +815,8 @@ def render_query_step() -> None:
                 search_results,
                 {
                     **current_query_settings,
+                    "query_variations": query_variations,
+                    "queries_searched": queries_to_search,
                     "retrieval_config": retrieval_config,
                     "reranking_config": {**reranking_config, "enabled": reranking_applied},
                 },
