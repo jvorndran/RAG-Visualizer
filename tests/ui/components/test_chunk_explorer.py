@@ -95,18 +95,46 @@ def test_chunk_export_is_unicode_json_with_full_text_original_numbers_and_offset
     assert json.loads(serialize_chunk_selection([], "", None))["count"] == 0
 
 
-def test_download_control_tracks_search_and_disables_empty_selection():
+def test_download_preparation_is_explicit_reused_and_invalidated_by_search_or_generation():
     from unittest.mock import patch
 
-    with patch("unravel.ui.components.chunk_explorer.st.download_button") as download:
+    from unravel.ui.components.chunk_explorer import serialize_chunk_selection
+
+    with (
+        patch("unravel.ui.components.chunk_explorer.st.download_button") as download,
+        patch("unravel.ui.components.chunk_explorer.serialize_chunk_selection",
+              wraps=serialize_chunk_selection) as serialize,
+    ):
         app = AppTest.from_string(SCRIPT).run()
         assert not app.exception
+        serialize.assert_not_called()
+        download.assert_not_called()
+        app.selectbox[0].select(1).run()
+        serialize.assert_not_called()
+        app.button[0].click().run()
+        assert serialize.call_count == 1
         assert json.loads(download.call_args.kwargs["data"])["count"] == 3
         assert download.call_args.kwargs["mime"] == "application/json"
         assert download.call_args.kwargs["file_name"] == "chunks.json"
-        assert download.call_args.kwargs["disabled"] is False
+        app.selectbox[0].select(2).run()
+        assert serialize.call_count == 1
+        previous_downloads = download.call_count
         app.text_input[0].set_value("strasse").run()
+        assert serialize.call_count == 1
+        assert download.call_count == previous_downloads
+        app.button[0].click().run()
+        assert serialize.call_count == 2
         assert json.loads(download.call_args.kwargs["data"])["chunks"][0]["chunk_number"] == 3
+        previous_downloads = download.call_count
         app.text_input[0].set_value("absent").run()
-        assert json.loads(download.call_args.kwargs["data"])["count"] == 0
-        assert download.call_args.kwargs["disabled"] is True
+        assert serialize.call_count == 2
+        assert download.call_count == previous_downloads
+        assert app.button[0].disabled
+        app.session_state["generation"] = "second"
+        app.run()
+        assert app.text_input[0].value == ""
+        assert serialize.call_count == 2
+        assert download.call_count == previous_downloads
+        app.button[0].click().run()
+        assert serialize.call_count == 3
+        assert json.loads(download.call_args.kwargs["data"])["count"] == 3

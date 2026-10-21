@@ -79,6 +79,9 @@ def test_text_explorer_rerun_keeps_generated_chunks_and_cache(chunks_app_script)
         search = next(widget for widget in app.text_input if widget.label == "Search chunk text")
         search.set_value("needle").run(timeout=30)
         assert not app.exception
+        prepare = next(widget for widget in app.button if widget.label == "Prepare JSON download")
+        prepare.click().run(timeout=30)
+        assert not app.exception
         generate.assert_called_once()
         assert app.session_state["chunks"] == chunks
         assert len(app.session_state["chunk_display_data"]) == 2

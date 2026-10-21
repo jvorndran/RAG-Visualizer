@@ -52,15 +52,31 @@ def render_chunk_explorer(
         st.caption(
             f"{len(indices)} of {len(chunks)} chunks match. Original chunk numbers are retained."
         )
-        st.download_button(
-            "Download matching chunks",
-            data=serialize_chunk_selection(chunks, query, document_name),
-            file_name="chunks.json",
-            mime="application/json",
-            key=f"chunk_explorer_download_{state_key}",
+        export_key = "chunk_explorer_prepared_export"
+        prepared = st.session_state.get(export_key)
+        if prepared and (prepared["generation"] != state_key or prepared["query"] != query):
+            st.session_state.pop(export_key)
+            prepared = None
+        if not prepared and st.button(
+            "Prepare JSON download",
+            key=f"chunk_explorer_prepare_{state_key}",
             disabled=not indices,
-            help="Export full raw text, original chunk numbers, and source offsets as JSON.",
-        )
+        ):
+            prepared = {
+                "generation": state_key,
+                "query": query,
+                "data": serialize_chunk_selection(chunks, query, document_name),
+            }
+            st.session_state[export_key] = prepared
+        if prepared:
+            st.download_button(
+                "Download matching chunks",
+                data=prepared["data"],
+                file_name="chunks.json",
+                mime="application/json",
+                key=f"chunk_explorer_download_{state_key}",
+                help="Export full raw text, original chunk numbers, and source offsets as JSON.",
+            )
         if not indices:
             st.info("No matching chunks. Clear or change the search to inspect other chunks.")
             return
