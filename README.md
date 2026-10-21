@@ -135,7 +135,7 @@ uv run python -m unravel
 
 ## Features
 
-The Text splitting step includes an **Explore chunk text** panel. Search generated raw text with a case-insensitive literal substring, then inspect the full text, original chunk number, source offsets, and metadata of each match. Searching uses the existing chunks locally and leaves the chunking, embedding, and retrieval pipeline unchanged.
+The Text splitting step includes an **Explore chunk text** panel. Search generated raw text with a case-insensitive literal substring, then inspect the full text, original chunk number, source offsets, and metadata of each match. **Download matching chunks** exports the selected document's matching full text, original numbers, and offsets as versioned Unicode JSON; an empty search exports all chunks. The download excludes arbitrary metadata and provider settings. These controls use existing chunks locally and leave the chunking, embedding, and retrieval pipeline unchanged.
 
 Unravel guides you through a structured 5-step pipeline for building and testing RAG systems:
 

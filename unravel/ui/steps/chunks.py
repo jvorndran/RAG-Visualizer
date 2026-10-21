@@ -316,7 +316,7 @@ def render_chunks_step() -> None:
         st.session_state["chunk_display_cache_key"] = display_cache_key
         st.session_state["chunk_display_data"] = chunk_display_data
 
-    render_chunk_explorer(chunks, st.session_state.get("chunks_cache_key", ""))
+    render_chunk_explorer(chunks, st.session_state.get("chunks_cache_key", ""), selected_doc)
 
     view_mode = ui.tabs(
         options=["Visual View", "Raw JSON"],

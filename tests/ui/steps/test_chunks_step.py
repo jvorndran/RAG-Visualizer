@@ -72,6 +72,7 @@ def test_text_explorer_rerun_keeps_generated_chunks_and_cache(chunks_app_script)
     with (
         patch("unravel.ui.steps.chunks.load_parsed_text", return_value="Parsed text"),
         patch("unravel.ui.steps.chunks.get_chunks", return_value=chunks) as generate,
+        patch("unravel.ui.components.chunk_explorer.st.download_button") as download,
     ):
         app = AppTest.from_string(script).run(timeout=30)
         assert not app.exception
@@ -84,6 +85,12 @@ def test_text_explorer_rerun_keeps_generated_chunks_and_cache(chunks_app_script)
         selector = next(widget for widget in app.selectbox if widget.label == "Inspect chunk")
         assert selector.value == 1
         assert app.code[0].value == chunks[1].text
+        import json
+
+        exported = json.loads(download.call_args.kwargs["data"])
+        assert exported["document"] == "test.pdf"
+        assert exported["count"] == 1
+        assert exported["chunks"][0]["chunk_number"] == 2
 
 
 class TestChunksStepInitialization:

@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 from types import SimpleNamespace
 
@@ -62,3 +63,50 @@ def test_new_generation_uses_fresh_widget_state_and_empty_chunks_are_safe():
     assert not empty.exception
     assert len(empty.selectbox) == 0
     assert "0 of 0" in empty.caption[0].value
+
+
+def test_chunk_export_is_unicode_json_with_full_text_original_numbers_and_offsets():
+    from unravel.ui.components.chunk_explorer import serialize_chunk_selection
+
+    chunks = [
+        SimpleNamespace(text="Hidden", start_index=0, end_index=6, metadata={}),
+        SimpleNamespace(text="Straße\n" + "x" * 10000, start_index=None, end_index=None,
+                        metadata={"api_key": "must-not-be-exported"}),
+        SimpleNamespace(text="STRASSE", start_index=200, end_index=207, metadata={}),
+    ]
+    before = deepcopy(chunks)
+    raw = serialize_chunk_selection(chunks, " STRASSE ", "example.txt")
+    output = json.loads(raw)
+    assert output["schema_version"] == 1
+    assert output["document"] == "example.txt"
+    assert output["search_text"] == "STRASSE"
+    assert output["case_sensitive"] is False
+    assert output["total_chunks"] == 3
+    assert output["count"] == 2
+    assert output["chunks"] == [
+        {"chunk_number": 2, "text": chunks[1].text, "start_index": None, "end_index": None},
+        {"chunk_number": 3, "text": "STRASSE", "start_index": 200, "end_index": 207},
+    ]
+    assert "Straße" in raw
+    assert "must-not-be-exported" not in raw
+    assert raw.endswith("\n")
+    assert chunks == before
+    assert json.loads(serialize_chunk_selection(chunks, "absent", "test"))["chunks"] == []
+    assert json.loads(serialize_chunk_selection([], "", None))["count"] == 0
+
+
+def test_download_control_tracks_search_and_disables_empty_selection():
+    from unittest.mock import patch
+
+    with patch("unravel.ui.components.chunk_explorer.st.download_button") as download:
+        app = AppTest.from_string(SCRIPT).run()
+        assert not app.exception
+        assert json.loads(download.call_args.kwargs["data"])["count"] == 3
+        assert download.call_args.kwargs["mime"] == "application/json"
+        assert download.call_args.kwargs["file_name"] == "chunks.json"
+        assert download.call_args.kwargs["disabled"] is False
+        app.text_input[0].set_value("strasse").run()
+        assert json.loads(download.call_args.kwargs["data"])["chunks"][0]["chunk_number"] == 3
+        app.text_input[0].set_value("absent").run()
+        assert json.loads(download.call_args.kwargs["data"])["count"] == 0
+        assert download.call_args.kwargs["disabled"] is True
