@@ -61,6 +61,31 @@ render_chunks_step()
 """
 
 
+def test_text_explorer_rerun_keeps_generated_chunks_and_cache(chunks_app_script):
+    chunks = [
+        Chunk(text="First", metadata={}, start_index=0, end_index=5),
+        Chunk(text="Needle in second chunk", metadata={}, start_index=5, end_index=27),
+    ]
+    script = chunks_app_script.replace(
+        'st.session_state.doc_name = None', 'st.session_state.doc_name = "test.pdf"'
+    )
+    with (
+        patch("unravel.ui.steps.chunks.load_parsed_text", return_value="Parsed text"),
+        patch("unravel.ui.steps.chunks.get_chunks", return_value=chunks) as generate,
+    ):
+        app = AppTest.from_string(script).run(timeout=30)
+        assert not app.exception
+        search = next(widget for widget in app.text_input if widget.label == "Search chunk text")
+        search.set_value("needle").run(timeout=30)
+        assert not app.exception
+        generate.assert_called_once()
+        assert app.session_state["chunks"] == chunks
+        assert len(app.session_state["chunk_display_data"]) == 2
+        selector = next(widget for widget in app.selectbox if widget.label == "Inspect chunk")
+        assert selector.value == 1
+        assert app.code[0].value == chunks[1].text
+
+
 class TestChunksStepInitialization:
     """Test chunks step initialization and rendering."""
 

@@ -1,0 +1,64 @@
+from copy import deepcopy
+from types import SimpleNamespace
+
+from streamlit.testing.v1 import AppTest
+
+from unravel.ui.components.chunk_explorer import matching_chunk_indices
+
+
+def test_literal_unicode_search_keeps_original_indices_and_inputs():
+    chunks = [SimpleNamespace(text=text) for text in ["", "Straße\nDetails", "[Raw]", "STRASSE"]]
+    before = deepcopy(chunks)
+    assert matching_chunk_indices(chunks, " STRASSE ") == [1, 3]
+    assert matching_chunk_indices(chunks, "[raw]") == [2]
+    assert matching_chunk_indices(chunks, "a.*") == []
+    assert matching_chunk_indices(chunks, "  ") == [0, 1, 2, 3]
+    assert matching_chunk_indices([], "") == []
+    assert chunks == before
+
+
+SCRIPT = '''
+from types import SimpleNamespace
+import streamlit as st
+from unravel.ui.components.chunk_explorer import render_chunk_explorer
+chunks = [SimpleNamespace(text=text, start_index=i * 100, end_index=i * 100 + len(text),
+    metadata={"source": "fixture", "chunk_index": i})
+    for i, text in enumerate(["First", "# Heading", "Straße\\n" + "x" * 10000])]
+render_chunk_explorer(chunks, st.session_state.get("generation", "first"))
+'''
+
+
+def test_explorer_filters_selects_full_text_and_recovers_from_no_matches():
+    app = AppTest.from_string(SCRIPT).run()
+    assert not app.exception
+    assert len(app.selectbox[0].options) == 3
+    app.text_input[0].set_value("strasse").run()
+    assert not app.exception
+    assert len(app.selectbox[0].options) == 1
+    assert app.selectbox[0].value == 2
+    assert "Chunk 3" in app.selectbox[0].options[0]
+    assert app.code[0].value == "Straße\n" + "x" * 10000
+    assert "Source offsets: 200" in app.caption[1].value
+    app.text_input[0].set_value("missing").run()
+    assert len(app.selectbox) == 0
+    assert len(app.code) == 0
+    assert "No matching chunks" in app.info[0].value
+    app.text_input[0].set_value("").run()
+    app.selectbox[0].select(1).run()
+    assert app.code[0].value == "# Heading"
+    assert not app.exception
+
+
+def test_new_generation_uses_fresh_widget_state_and_empty_chunks_are_safe():
+    app = AppTest.from_string(SCRIPT).run()
+    app.text_input[0].set_value("missing").run()
+    app.session_state["generation"] = "second"
+    app.run()
+    assert app.text_input[0].value == ""
+    assert len(app.selectbox[0].options) == 3
+    empty_script = SCRIPT.replace("render_chunk_explorer(chunks,", "render_chunk_explorer([],"
+    )
+    empty = AppTest.from_string(empty_script).run()
+    assert not empty.exception
+    assert len(empty.selectbox) == 0
+    assert "0 of 0" in empty.caption[0].value
