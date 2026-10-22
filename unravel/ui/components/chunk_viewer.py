@@ -316,6 +316,7 @@ def render_chunk_cards(
     show_overlap: bool = True,
     display_mode: str = "continuous",
     render_format: str = "markdown",
+    hide_header_only: bool = True,
 ) -> None:
     """Render chunk cards as HTML with expandable metadata.
 
@@ -328,6 +329,7 @@ def render_chunk_cards(
         display_mode: Display style - "continuous" (colored flow) or "card" (individual
             cards with borders)
         render_format: Chunk render format (markdown, html, doctags, json)
+        hide_header_only: Hide heading-only chunks outside retrieval inspection.
     """
     if not chunk_display_data:
         st.markdown(
@@ -344,7 +346,7 @@ def render_chunk_cards(
 
         # Check if chunk is header-only
         is_header_only = False
-        if "heading_text" in meta:
+        if hide_header_only and "heading_text" in meta:
             chunk_text_stripped = display_text.strip()
             heading_stripped = str(meta["heading_text"]).strip()
             # Skip chunks that are just headers
