@@ -82,6 +82,11 @@ def test_text_explorer_rerun_keeps_generated_chunks_and_cache(chunks_app_script)
         search = next(widget for widget in app.text_input if widget.label == "Search chunk text")
         search.set_value("needle").run(timeout=30)
         assert not app.exception
+        minimum = next(widget for widget in app.number_input if widget.label == "Minimum characters")
+        minimum.set_value(10).run(timeout=30)
+        maximum = next(widget for widget in app.number_input if widget.label == "Maximum characters")
+        maximum.set_value(30).run(timeout=30)
+        assert not app.exception
         prepare = next(widget for widget in app.button if widget.label == "Prepare JSON download")
         prepare.click().run(timeout=30)
         assert not app.exception
@@ -98,6 +103,8 @@ def test_text_explorer_rerun_keeps_generated_chunks_and_cache(chunks_app_script)
         exported = json.loads(download.call_args.kwargs["data"])
         assert exported["document"] == "test.pdf"
         assert exported["count"] == 1
+        assert exported["min_characters"] == 10
+        assert exported["max_characters"] == 30
         assert exported["chunks"][0]["chunk_number"] == 2
 
 

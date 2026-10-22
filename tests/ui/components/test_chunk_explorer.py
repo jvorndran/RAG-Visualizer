@@ -18,6 +18,32 @@ def test_literal_unicode_search_keeps_original_indices_and_inputs():
     assert chunks == before
 
 
+def test_size_bounds_are_inclusive_use_raw_characters_and_compose_with_search():
+    chunks = [SimpleNamespace(text=text) for text in ["", "é", "Straße", "STRASSE", "long text"]]
+    before = deepcopy(chunks)
+    assert matching_chunk_indices(chunks, "", 0, 0) == [0]
+    assert matching_chunk_indices(chunks, "", 1, 6) == [1, 2]
+    assert matching_chunk_indices(chunks, "strasse", 6, 6) == [2]
+    assert matching_chunk_indices(chunks, "", 7) == [3, 4]
+    assert matching_chunk_indices([], "", 1, 5) == []
+    assert chunks == before
+
+
+def test_size_filtered_export_records_bounds_and_original_chunk_identity():
+    from unravel.ui.components.chunk_explorer import serialize_chunk_selection
+
+    chunks = [SimpleNamespace(text=text, start_index=i, end_index=i + len(text))
+              for i, text in enumerate(["tiny", "needle", "Long needle"])]
+    output = json.loads(serialize_chunk_selection(chunks, "needle", "file.txt", 6, 6))
+    assert output["min_characters"] == 6
+    assert output["max_characters"] == 6
+    assert output["count"] == 1
+    assert output["total_chunks"] == 3
+    assert output["chunks"] == [
+        {"chunk_number": 2, "text": "needle", "start_index": 1, "end_index": 7}
+    ]
+
+
 SCRIPT = '''
 from types import SimpleNamespace
 import streamlit as st
@@ -27,6 +53,39 @@ chunks = [SimpleNamespace(text=text, start_index=i * 100, end_index=i * 100 + le
     for i, text in enumerate(["First", "# Heading", "Straße\\n" + "x" * 10000])]
 render_chunk_explorer(chunks, st.session_state.get("generation", "first"))
 '''
+
+
+def test_size_controls_invalidate_downloads_and_handle_invalid_ranges():
+    from unittest.mock import patch
+
+    with patch("unravel.ui.components.chunk_explorer.st.download_button") as download:
+        app = AppTest.from_string(SCRIPT).run()
+        app.button[0].click().run()
+        previous_downloads = download.call_count
+        app.number_input[0].set_value(6).run()
+        assert not app.exception
+        assert download.call_count == previous_downloads
+        assert app.selectbox[0].value == 1
+        assert len(app.selectbox[0].options) == 2
+        app.number_input[1].set_value(9).run()
+        assert len(app.selectbox[0].options) == 1
+        assert app.code[0].value == "# Heading"
+        app.button[0].click().run()
+        assert json.loads(download.call_args.kwargs["data"])["count"] == 1
+        previous_downloads = download.call_count
+        app.number_input[1].set_value(5).run()
+        assert not app.exception
+        assert app.error
+        assert not app.selectbox
+        assert download.call_count == previous_downloads
+        app.number_input[1].set_value(None).run()
+        assert not app.error
+        assert len(app.selectbox[0].options) == 2
+        app.session_state["generation"] = "second"
+        app.run()
+        assert app.number_input[0].value == 0
+        assert app.number_input[1].value is None
+        assert len(app.selectbox[0].options) == 3
 
 
 def test_explorer_filters_selects_full_text_and_recovers_from_no_matches():
