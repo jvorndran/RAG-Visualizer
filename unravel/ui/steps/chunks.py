@@ -9,6 +9,7 @@ import streamlit_shadcn_ui as ui
 from unravel.services.chunking import get_chunks
 from unravel.services.storage import get_documents_dir, load_document, save_rag_config
 from unravel.ui.components.chunk_diagnostics import render_chunk_diagnostics
+from unravel.ui.components.chunk_explorer import render_chunk_explorer
 from unravel.ui.components.chunk_viewer import (
     prepare_chunk_display_data,
     render_chunk_cards,
@@ -316,6 +317,7 @@ def render_chunks_step() -> None:
         st.session_state["chunk_display_cache_key"] = display_cache_key
         st.session_state["chunk_display_data"] = chunk_display_data
 
+    render_chunk_explorer(chunks, st.session_state.get("chunks_cache_key", ""), selected_doc)
     render_chunk_diagnostics(chunks)
 
     view_mode = ui.tabs(
