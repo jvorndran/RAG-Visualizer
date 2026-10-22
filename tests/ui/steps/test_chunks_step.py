@@ -361,6 +361,8 @@ class TestChunksStepChunkGeneration:
         # Verify chunks are in session state
         assert "chunks" in at.session_state
         assert len(at.session_state.chunks) == 2
+        assert any(expander.label == "Chunk diagnostics" for expander in at.expander)
+        assert at.metric[0].value == "2"
 
     @patch("unravel.ui.steps.chunks.get_chunks")
     @patch("unravel.ui.steps.chunks.load_document")
