@@ -10,6 +10,21 @@ class RankedChunk:
     text: str
     score: float
     rank: int
+    original_score: float | None = None
+
+
+@dataclass(frozen=True)
+class RetrievalExecution:
+    queries_searched: tuple[str, ...]
+    query_variations: tuple[str, ...]
+    expansion_enabled: bool
+    variation_count: int | None
+    rewrite_prompt: str | None
+    fusion_method: str | None
+    dense_weight: float | None
+    fusion_rrf_k: int | None
+    query_rrf_k: int | None
+    reranker_top_n: int | None
 
 
 @dataclass(frozen=True)
@@ -20,6 +35,7 @@ class RetrievalSnapshot:
     threshold: float | None
     reranker: str | None
     chunks: tuple[RankedChunk, ...]
+    execution: RetrievalExecution | None = None
 
 
 def snapshot_retrieval(
@@ -33,7 +49,16 @@ def snapshot_retrieval(
         if identity in seen:
             continue
         seen.add(identity)
-        chunks.append(RankedChunk(result.index, result.text, result.score, len(chunks) + 1))
+        chunks.append(RankedChunk(
+            result.index, result.text, result.score, len(chunks) + 1,
+            getattr(result, "metadata", {}).get("original_score", result.score),
+        ))
+    strategy = settings.get("retrieval_config", {}).get("strategy", "DenseRetriever")
+    params = settings.get("retrieval_config", {}).get("params", {})
+    fusion = params.get("fusion_method", "weighted_sum") if strategy == "HybridRetriever" else None
+    reranking = settings.get("reranking_config", {})
+    queries = tuple(settings.get("queries_searched", [query]))
+    expansion = settings.get("enable_query_expansion", False)
     return RetrievalSnapshot(
         query=query,
         strategy=settings.get("retrieval_config", {}).get("strategy", "DenseRetriever"),
@@ -45,6 +70,18 @@ def snapshot_retrieval(
             else None
         ),
         chunks=tuple(chunks),
+        execution=RetrievalExecution(
+            queries_searched=queries,
+            query_variations=tuple(settings.get("query_variations", [])),
+            expansion_enabled=expansion,
+            variation_count=settings.get("variation_count", 4) if expansion else None,
+            rewrite_prompt=settings.get("rewrite_prompt") if expansion else None,
+            fusion_method=fusion,
+            dense_weight=params.get("dense_weight", 0.7) if fusion == "weighted_sum" else None,
+            fusion_rrf_k=60 if fusion == "rrf" else None,
+            query_rrf_k=60 if len(queries) > 1 else None,
+            reranker_top_n=reranking.get("top_n", 5) if reranking.get("enabled") else None,
+        ),
     )
 
 

@@ -138,11 +138,11 @@ def rerank_results(
         reranked_results.append(
             SearchResult(
                 index=original.index,
-                score=item["score"],
+                score=float(item["score"]),
                 text=original.text,
                 metadata={
                     **original.metadata,
-                    "original_score": original.score,
+                    "original_score": original.metadata.get("original_score", original.score),
                     "reranked": True,
                     "reranker_model": config.model,
                 },
