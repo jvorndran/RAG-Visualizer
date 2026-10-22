@@ -52,6 +52,23 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
         removed = sum(row["Change"] == "Removed" for row in rows)
         st.caption(f"{retained} retained · {added} added · {removed} removed")
         st.dataframe(rows, hide_index=True, use_container_width=True)
+        if rows:
+            selected = st.selectbox(
+                "Inspect full chunk text",
+                options=range(len(rows)),
+                format_func=lambda position: (
+                    f"Chunk {rows[position]['Chunk']} · {rows[position]['Change']}"
+                    f" · baseline rank {rows[position]['Baseline rank'] or '—'}"
+                    f" · current rank {rows[position]['Current rank'] or '—'}"
+                ),
+                key="retrieval_comparison_inspect",
+            )
+            row = rows[selected]
+            if row["Current rank"] is not None:
+                chunk = current.chunks[row["Current rank"] - 1]
+            else:
+                chunk = baseline.chunks[row["Baseline rank"] - 1]
+            st.text(chunk.text)
         st.caption(
             "Positive rank changes mean a chunk moved up. Scores retain each run's scale; "
             "different retrievers or rerankers may produce incomparable scores. "
