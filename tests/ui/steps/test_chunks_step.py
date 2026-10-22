@@ -76,6 +76,9 @@ def test_text_explorer_rerun_keeps_generated_chunks_and_cache(chunks_app_script)
     ):
         app = AppTest.from_string(script).run(timeout=30)
         assert not app.exception
+        assert {expander.label for expander in app.expander} >= {
+            "Explore chunk text", "Chunk diagnostics"
+        }
         search = next(widget for widget in app.text_input if widget.label == "Search chunk text")
         search.set_value("needle").run(timeout=30)
         assert not app.exception
@@ -87,6 +90,8 @@ def test_text_explorer_rerun_keeps_generated_chunks_and_cache(chunks_app_script)
         assert len(app.session_state["chunk_display_data"]) == 2
         selector = next(widget for widget in app.selectbox if widget.label == "Inspect chunk")
         assert selector.value == 1
+        assert app.selectbox(key="chunk_diagnostics_chunk").value == 0
+        assert [metric.value for metric in app.metric if metric.label == "Chunks"] == ["2"]
         assert app.code[0].value == chunks[1].text
         import json
 
@@ -396,6 +401,8 @@ class TestChunksStepChunkGeneration:
         # Verify chunks are in session state
         assert "chunks" in at.session_state
         assert len(at.session_state.chunks) == 2
+        assert any(expander.label == "Chunk diagnostics" for expander in at.expander)
+        assert at.metric[0].value == "2"
 
     @patch("unravel.ui.steps.chunks.get_chunks")
     @patch("unravel.ui.steps.chunks.load_document")

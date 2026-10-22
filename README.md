@@ -263,6 +263,12 @@ MIT License - see LICENSE file for details.
 
 ## Compare retrieved context
 
+Use **Find in retrieved context** in the Query step to search this run's chunk text with case-insensitive substring matching. The count shows how many cards match, and each card retains its original retrieval rank and scores. Clear the search to restore every card. This inspection control runs locally; the generated answer and pinned comparison retain all retrieved chunks.
+
 After asking a query, open **Compare retrieval runs** in the Query step and select **Pin current run as baseline**. Change the query, retrieval strategy, top k, minimum score, or reranking settings, then click **Ask** again. The table shows retained, added, and removed chunks with both ranks and scores; a positive rank change means the chunk moved up. Scores remain on their original scales and should not be compared numerically across retrievers or rerankers.
 
 The pinned snapshot stays unchanged until replaced or cleared and lasts for the browser session. Comparison uses already retrieved results and makes no extra embedding, retrieval, or model calls. Chunk identity combines its index and full text, so replacing document content cannot silently match a different chunk with the same index.
+
+Select **Download retrieval experiment** in the Query step to save a JSON snapshot of the executed query, retrieval settings, full chunk text, ranks and scores. If a baseline is pinned, the download also contains its full snapshot and the comparison table. Empty-result runs can be exported. The versioned document uses JSON `null` for non-finite measurements and excludes provider configuration and arbitrary metadata; it includes the retrieved document text. Export uses only captured results and makes no additional provider calls.
+
+Use **Inspect full chunk text** below the comparison table to read beyond an excerpt. Added and retained chunks show the current run's complete text; removed chunks show the pinned baseline's text, even when the current run returns no chunks. The selector includes each chunk's change type and original ranks.

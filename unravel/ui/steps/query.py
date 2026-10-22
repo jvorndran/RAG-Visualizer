@@ -28,6 +28,7 @@ from unravel.ui.components.chunk_viewer import (
     render_chunk_cards,
 )
 from unravel.ui.components.retrieval_comparison import render_retrieval_comparison
+from unravel.ui.components.retrieval_export import render_retrieval_export
 from unravel.ui.constants import WidgetKeys, get_threshold_slider_key
 from unravel.utils.ui import render_page_header, render_section_heading
 
@@ -173,10 +174,28 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
         st.session_state.get("last_query_settings") or {},
     )
     render_retrieval_comparison(current_snapshot)
+    render_retrieval_export(current_snapshot)
     if not results:
         return
 
     render_section_heading(f"Retrieved context ({len(results)} chunks)")
+
+    search_text = st.text_input(
+        "Find in retrieved context",
+        key="retrieved_context_search",
+        placeholder="Search chunk text...",
+        help="Case-insensitive text search within this run. Filters the displayed cards only; "
+        "the answer and pinned comparison retain the complete retrieved context.",
+    ).strip().casefold()
+    ranked_results = [
+        (rank, result)
+        for rank, result in enumerate(results, 1)
+        if not search_text or search_text in result.text.casefold()
+    ]
+    st.caption(f"Showing {len(ranked_results)} of {len(results)} retrieved chunks.")
+    if not ranked_results:
+        st.info("No retrieved chunks match this text. Clear the search to show all context.")
+        return
 
     # Convert search results to chunks for the viewer
     from dataclasses import dataclass
@@ -194,10 +213,10 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
         ChunkAdapter(
             text=res.text,
             metadata=res.metadata,
-            start_index=i,
-            end_index=i,
+            start_index=rank - 1,
+            end_index=rank - 1,
         )
-        for i, res in enumerate(results)
+        for rank, res in ranked_results
     ]
 
     # Prepare display data
@@ -207,18 +226,20 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
         calculate_overlap=False,
     )
 
-    custom_badges: list[list[dict[str, Any]]] | None = None
-    if show_scores:
-        custom_badges = []
-        for res in results:
+    custom_badges: list[list[dict[str, Any]]] = []
+    for rank, res in ranked_results:
+        badges: list[dict[str, Any]] = [
+            {"label": "Rank", "value": str(rank), "color": "#e2e8f0"}
+        ]
+        if show_scores:
             base_score = res.metadata.get("original_score", res.score)
-            badges: list[dict[str, Any]] = [
+            badges.append(
                 {
                     "label": "Score",
                     "value": f"{base_score:.4f}",
                     "color": "#d1fae5",
                 }
-            ]
+            )
 
             dense_rrf_contribution = res.metadata.get("dense_rrf_contribution")
             if dense_rrf_contribution is not None:
@@ -240,7 +261,7 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
                     }
                 )
 
-            custom_badges.append(badges)
+        custom_badges.append(badges)
 
     # Render using the reusable component in card mode
     render_chunk_cards(
@@ -248,6 +269,7 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
         custom_badges=custom_badges,
         show_overlap=False,
         display_mode="card",
+        hide_header_only=False,
     )
 
 
@@ -758,9 +780,11 @@ def render_query_step() -> None:
                 )
 
             # Retrieve (multi-query)
+            queries_searched = []
             try:
                 results_by_query = []
                 for query in queries_to_search:
+                    queries_searched.append(query)
                     query_results = retrieve(
                         query=query,
                         vector_store=vector_store,
@@ -813,6 +837,8 @@ def render_query_step() -> None:
                 search_results,
                 {
                     **current_query_settings,
+                    "query_variations": query_variations,
+                    "queries_searched": queries_searched,
                     "retrieval_config": retrieval_config,
                     "reranking_config": {**reranking_config, "enabled": reranking_applied},
                 },
