@@ -44,6 +44,40 @@ def test_size_filtered_export_records_bounds_and_original_chunk_identity():
     ]
 
 
+def test_repeated_text_filter_keeps_every_exact_occurrence_and_composes_with_bounds():
+    texts = ["", "Header", "header", " Header", "Header", "", "Straße", "STRASSE", "Straße"]
+    chunks = [SimpleNamespace(text=text) for text in texts]
+    before = deepcopy(chunks)
+    assert matching_chunk_indices(chunks, "", repeated_text_only=True) == [0, 1, 4, 5, 6, 8]
+    assert matching_chunk_indices(chunks, "HEADER", 6, 6, repeated_text_only=True) == [1, 4]
+    assert matching_chunk_indices(chunks, "strasse", repeated_text_only=True) == [6, 8]
+    assert matching_chunk_indices(chunks, "", 0, 0, repeated_text_only=True) == [0, 5]
+    assert matching_chunk_indices(chunks, "", repeated_text_only=False) == list(range(9))
+    assert matching_chunk_indices([], "", repeated_text_only=True) == []
+    assert matching_chunk_indices(chunks[:2], "", repeated_text_only=True) == []
+    assert chunks == before
+
+
+def test_repeated_text_export_records_filter_without_renumbering_or_removing_copies():
+    from unravel.ui.components.chunk_explorer import serialize_chunk_selection
+
+    chunks = [SimpleNamespace(text=text, start_index=i * 100, end_index=i * 100 + len(text))
+              for i, text in enumerate(["unique", "Straße", "STRASSE", "Straße"])]
+    before = deepcopy(chunks)
+    output = json.loads(serialize_chunk_selection(
+        chunks, "STRASSE", "file.txt", 6, 6, repeated_text_only=True
+    ))
+    assert output["repeated_text_only"] is True
+    assert output["count"] == 2
+    assert output["total_chunks"] == 4
+    assert output["chunks"] == [
+        {"chunk_number": 2, "text": "Straße", "start_index": 100, "end_index": 106},
+        {"chunk_number": 4, "text": "Straße", "start_index": 300, "end_index": 306},
+    ]
+    assert json.loads(serialize_chunk_selection(chunks, "", None))["repeated_text_only"] is False
+    assert chunks == before
+
+
 SCRIPT = '''
 from types import SimpleNamespace
 import streamlit as st
@@ -53,6 +87,53 @@ chunks = [SimpleNamespace(text=text, start_index=i * 100, end_index=i * 100 + le
     for i, text in enumerate(["First", "# Heading", "Straße\\n" + "x" * 10000])]
 render_chunk_explorer(chunks, st.session_state.get("generation", "first"))
 '''
+
+
+def test_repeated_text_control_invalidates_exports_recovers_and_resets_with_generation():
+    from unittest.mock import patch
+
+    from unravel.ui.components.chunk_explorer import serialize_chunk_selection
+
+    script = SCRIPT.replace(
+        '["First", "# Heading", ', '["First", "# Heading", "# Heading", ',
+    )
+    with (
+        patch("unravel.ui.components.chunk_explorer.st.download_button") as download,
+        patch("unravel.ui.components.chunk_explorer.serialize_chunk_selection",
+              wraps=serialize_chunk_selection) as serialize,
+    ):
+        app = AppTest.from_string(script).run()
+        assert not app.exception
+        assert len(app.selectbox[0].options) == 4
+        app.button[0].click().run()
+        assert serialize.call_count == 1
+        previous_downloads = download.call_count
+        app.checkbox[0].check().run()
+        assert not app.exception
+        assert serialize.call_count == 1
+        assert download.call_count == previous_downloads
+        assert "2 of 4" in app.caption[0].value
+        assert app.selectbox[0].value == 1
+        app.selectbox[0].select(2).run()
+        app.button[0].click().run()
+        assert serialize.call_count == 2
+        exported = json.loads(download.call_args.kwargs["data"])
+        assert exported["repeated_text_only"] is True
+        assert [chunk["chunk_number"] for chunk in exported["chunks"]] == [2, 3]
+        app.selectbox[0].select(1).run()
+        assert serialize.call_count == 2
+        app.text_input[0].set_value("First").run()
+        assert not app.selectbox
+        assert app.button[0].disabled
+        app.checkbox[0].uncheck().run()
+        assert app.code[0].value == "First"
+        app.checkbox[0].check().run()
+        app.session_state["generation"] = "second"
+        app.run()
+        assert not app.exception
+        assert app.checkbox[0].value is False
+        assert len(app.selectbox[0].options) == 4
+        assert "chunk_explorer_prepared_export" not in app.session_state
 
 
 def test_size_controls_invalidate_downloads_and_handle_invalid_ranges():

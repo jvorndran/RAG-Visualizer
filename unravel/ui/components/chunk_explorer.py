@@ -2,30 +2,37 @@
 
 import hashlib
 import json
+from collections import Counter
 from typing import Any
 
 import streamlit as st
 
 
 def matching_chunk_indices(
-    chunks: list[Any], query: str, min_characters: int = 0, max_characters: int | None = None
+    chunks: list[Any], query: str, min_characters: int = 0, max_characters: int | None = None,
+    repeated_text_only: bool = False,
 ) -> list[int]:
-    """Return original indices matching text and inclusive raw-character bounds."""
+    """Return original indices matching text, size, and optional exact-repeat filters."""
     needle = query.strip().casefold()
+    text_counts = Counter(chunk.text for chunk in chunks) if repeated_text_only else None
     return [
         index for index, chunk in enumerate(chunks)
         if len(chunk.text) >= min_characters
         and (max_characters is None or len(chunk.text) <= max_characters)
         and needle in chunk.text.casefold()
+        and (text_counts is None or text_counts[chunk.text] > 1)
     ]
 
 
 def serialize_chunk_selection(
     chunks: list[Any], query: str, document_name: str | None,
     min_characters: int = 0, max_characters: int | None = None,
+    repeated_text_only: bool = False,
 ) -> str:
     """Export matching text and offsets; exclude arbitrary metadata and configuration."""
-    indices = matching_chunk_indices(chunks, query, min_characters, max_characters)
+    indices = matching_chunk_indices(
+        chunks, query, min_characters, max_characters, repeated_text_only
+    )
     payload = {
         "schema_version": 1,
         "document": document_name,
@@ -33,6 +40,7 @@ def serialize_chunk_selection(
         "case_sensitive": False,
         "min_characters": min_characters,
         "max_characters": max_characters,
+        "repeated_text_only": repeated_text_only,
         "total_chunks": len(chunks),
         "count": len(indices),
         "chunks": [
@@ -71,19 +79,30 @@ def render_chunk_explorer(
                 placeholder="No limit", key=f"chunk_explorer_max_characters_{state_key}",
                 help="Inclusive raw-text character count. Leave empty for no upper bound.",
             )
+        repeated_text_only = st.checkbox(
+            "Repeated text only",
+            key=f"chunk_explorer_repeated_text_{state_key}",
+            help=(
+                "Include every occurrence of text found in multiple generated chunks. "
+                "Raw text must match exactly, including case, whitespace, and empty text."
+            ),
+        )
         export_key = "chunk_explorer_prepared_export"
         prepared = st.session_state.get(export_key)
         if prepared and (
             prepared["generation"] != state_key or prepared["query"] != query
             or prepared.get("min_characters") != min_characters
             or prepared.get("max_characters") != max_characters
+            or prepared.get("repeated_text_only", False) != repeated_text_only
         ):
             st.session_state.pop(export_key)
             prepared = None
         if max_characters is not None and min_characters > max_characters:
             st.error("Minimum characters must not exceed maximum characters.")
             return
-        indices = matching_chunk_indices(chunks, query, min_characters, max_characters)
+        indices = matching_chunk_indices(
+            chunks, query, min_characters, max_characters, repeated_text_only
+        )
         st.caption(
             f"{len(indices)} of {len(chunks)} chunks match. Original chunk numbers are retained."
         )
@@ -97,8 +116,9 @@ def render_chunk_explorer(
                 "query": query,
                 "min_characters": min_characters,
                 "max_characters": max_characters,
+                "repeated_text_only": repeated_text_only,
                 "data": serialize_chunk_selection(
-                    chunks, query, document_name, min_characters, max_characters
+                    chunks, query, document_name, min_characters, max_characters, repeated_text_only
                 ),
             }
             st.session_state[export_key] = prepared
@@ -112,10 +132,10 @@ def render_chunk_explorer(
                 help="Export full raw text, original chunk numbers, and source offsets as JSON.",
             )
         if not indices:
-            st.info("No matching chunks. Clear or change the search to inspect other chunks.")
+            st.info("No matching chunks. Clear or change the filters to inspect other chunks.")
             return
 
-        selection = json.dumps([query, min_characters, max_characters])
+        selection = json.dumps([query, min_characters, max_characters, repeated_text_only])
         query_key = hashlib.sha256(selection.encode("utf-8")).hexdigest()[:16]
         selected = st.selectbox(
             "Inspect chunk",
