@@ -108,6 +108,42 @@ def test_text_explorer_rerun_keeps_generated_chunks_and_cache(chunks_app_script)
         assert exported["chunks"][0]["chunk_number"] == 2
 
 
+def test_repeated_text_inspection_preserves_pipeline_chunks_and_diagnostics(chunks_app_script):
+    chunks = [
+        Chunk(text="Unique", metadata={}, start_index=0, end_index=6),
+        Chunk(text="Header", metadata={}, start_index=10, end_index=16),
+        Chunk(text="Header", metadata={}, start_index=20, end_index=26),
+    ]
+    script = chunks_app_script.replace(
+        'st.session_state.doc_name = None', 'st.session_state.doc_name = "test.pdf"'
+    )
+    with (
+        patch("unravel.ui.steps.chunks.load_parsed_text", return_value="Parsed text"),
+        patch("unravel.ui.steps.chunks.get_chunks", return_value=chunks) as generate,
+        patch("unravel.ui.components.chunk_explorer.st.download_button") as download,
+    ):
+        app = AppTest.from_string(script).run(timeout=30)
+        repeated = next(widget for widget in app.checkbox if widget.label == "Repeated text only")
+        repeated.check().run(timeout=30)
+        assert not app.exception
+        prepare = next(widget for widget in app.button if widget.label == "Prepare JSON download")
+        prepare.click().run(timeout=30)
+        assert not app.exception
+        generate.assert_called_once()
+        assert app.session_state["chunks"] == chunks
+        assert len(app.session_state["chunk_display_data"]) == 3
+        selector = next(widget for widget in app.selectbox if widget.label == "Inspect chunk")
+        assert selector.value == 1
+        assert len(selector.options) == 2
+        assert app.selectbox(key="chunk_diagnostics_chunk").value == 0
+        assert [metric.value for metric in app.metric if metric.label == "Chunks"] == ["3"]
+        import json
+
+        exported = json.loads(download.call_args.kwargs["data"])
+        assert exported["repeated_text_only"] is True
+        assert [chunk["chunk_number"] for chunk in exported["chunks"]] == [2, 3]
+
+
 class TestChunksStepInitialization:
     """Test chunks step initialization and rendering."""
 
