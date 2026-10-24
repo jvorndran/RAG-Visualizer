@@ -51,24 +51,45 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
         added = sum(row["Change"] == "Added" for row in rows)
         removed = sum(row["Change"] == "Removed" for row in rows)
         st.caption(f"{retained} retained · {added} added · {removed} removed")
-        st.dataframe(rows, hide_index=True, use_container_width=True)
-        if rows:
-            selected = st.selectbox(
-                "Inspect full chunk text",
-                options=range(len(rows)),
-                format_func=lambda position: (
-                    f"Chunk {rows[position]['Chunk']} · {rows[position]['Change']}"
-                    f" · baseline rank {rows[position]['Baseline rank'] or '—'}"
-                    f" · current rank {rows[position]['Current rank'] or '—'}"
-                ),
-                key="retrieval_comparison_inspect",
-            )
-            row = rows[selected]
+        change = st.selectbox(
+            "Show changes",
+            options=["All changes", "Added", "Removed", "Retained"],
+            key="retrieval_comparison_change",
+        )
+        search = st.text_input(
+            "Find in comparison text",
+            key="retrieval_comparison_search",
+            help="Search full chunk text, including removed baseline context. "
+            "Filters only this inspection view; snapshots and downloads stay complete.",
+        ).strip().casefold()
+        visible = []
+        for row in rows:
             if row["Current rank"] is not None:
                 chunk = current.chunks[row["Current rank"] - 1]
             else:
                 chunk = baseline.chunks[row["Baseline rank"] - 1]
-            st.text(chunk.text)
+            if (change == "All changes" or row["Change"] == change) and (
+                not search or search in chunk.text.casefold()
+            ):
+                visible.append((row, chunk))
+
+        st.caption(f"Showing {len(visible)} of {len(rows)} comparison chunks.")
+        if visible:
+            visible_rows = [row for row, _chunk in visible]
+            st.dataframe(visible_rows, hide_index=True, use_container_width=True)
+            selected = st.selectbox(
+                "Inspect full chunk text",
+                options=range(len(visible)),
+                format_func=lambda position: (
+                    f"Chunk {visible_rows[position]['Chunk']} · {visible_rows[position]['Change']}"
+                    f" · baseline rank {visible_rows[position]['Baseline rank'] or '—'}"
+                    f" · current rank {visible_rows[position]['Current rank'] or '—'}"
+                ),
+                key="retrieval_comparison_inspect",
+            )
+            st.text(visible[selected][1].text)
+        else:
+            st.info("No comparison chunks match. Clear the search or show all changes.")
         st.caption(
             "Positive rank changes mean a chunk moved up. Scores retain each run's scale; "
             "different retrievers or rerankers may produce incomparable scores. "

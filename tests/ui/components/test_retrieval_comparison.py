@@ -47,6 +47,70 @@ def test_empty_results_keep_baseline_visible_and_cannot_replace_it():
     assert list(app.dataframe[0].value["Change"]) == ["Removed", "Removed"]
 
 
+def test_filter_changes_keeps_original_ranks_and_full_text_inspection():
+    app = AppTest.from_string(APP).run()
+    app.button(key="retrieval_comparison_pin").click().run()
+    app.session_state["results"] = [(1, "second", 0.7), (2, "third", 0.5)]
+    app.run()
+    app.selectbox(key="retrieval_comparison_change").select("Removed").run()
+    assert not app.exception
+    frame = app.dataframe[0].value
+    assert list(frame["Change"]) == ["Removed"]
+    assert frame.iloc[0]["Baseline rank"] == 1
+    assert app.text[0].value == "first"
+    assert any("1 retained · 1 added · 1 removed" in item.value for item in app.caption)
+    app.selectbox(key="retrieval_comparison_change").select("Retained").run()
+    assert app.dataframe[0].value.iloc[0]["Rank change"] == 1
+    assert app.text[0].value == "second"
+    app.selectbox(key="retrieval_comparison_change").select("All changes").run()
+    assert list(app.dataframe[0].value["Change"]) == ["Retained", "Added", "Removed"]
+
+
+def test_search_uses_full_baseline_text_and_literal_unicode_matching():
+    app = AppTest.from_string(APP)
+    original = "baseline " + "x" * 200 + " Straße [needle]"
+    app.session_state["results"] = [(0, original, 0.8)]
+    app.run()
+    app.button(key="retrieval_comparison_pin").click().run()
+    app.session_state["results"] = [(0, "replacement [other]", 0.4)]
+    app.run()
+    app.text_input(key="retrieval_comparison_search").input("  STRASSE [NEEDLE]  ").run()
+    assert not app.exception
+    assert list(app.dataframe[0].value["Change"]) == ["Removed"]
+    assert app.text[0].value == original
+    assert "needle" not in app.dataframe[0].value.iloc[0]["Excerpt"]
+    app.selectbox(key="retrieval_comparison_change").select("Added").run()
+    assert len(app.text) == 0
+    assert len(app.selectbox) == 1
+    assert any("No comparison chunks match" in item.value for item in app.info)
+    app.text_input(key="retrieval_comparison_search").input("[other]").run()
+    assert list(app.dataframe[0].value["Change"]) == ["Added"]
+    assert app.text[0].value == "replacement [other]"
+    app.text_input(key="retrieval_comparison_search").input(".*").run()
+    assert len(app.text) == 0
+    assert app.session_state["retrieval_comparison_baseline"].chunks[0].text == original
+
+
+def test_filters_recover_after_empty_results_and_clear_with_baseline():
+    app = AppTest.from_string(APP).run()
+    app.button(key="retrieval_comparison_pin").click().run()
+    app.selectbox(key="retrieval_comparison_inspect").select(1).run()
+    app.selectbox(key="retrieval_comparison_change").select("Added").run()
+    assert not app.exception
+    assert len(app.text) == 0
+    app.session_state["results"] = [(9, "new", 0.5)]
+    app.run()
+    assert not app.exception
+    assert app.text[0].value == "new"
+    app.button(key="retrieval_comparison_clear").click().run()
+    assert len(app.selectbox) == 0
+    assert len(app.text_input) == 0
+    app.button(key="retrieval_comparison_pin").click().run()
+    assert not app.exception
+    assert app.selectbox(key="retrieval_comparison_change").value == "All changes"
+    assert app.text[0].value == "new"
+
+
 def test_inspector_shows_full_text_for_added_and_removed_chunks_with_reused_index():
     app = AppTest.from_string(APP)
     original = "old context\n" + "x" * 200 + "\nBASELINE END"
