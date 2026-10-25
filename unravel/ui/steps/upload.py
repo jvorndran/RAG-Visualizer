@@ -9,6 +9,7 @@ from unravel.services.storage import (
     get_current_document,
     save_document,
 )
+from unravel.ui.components.text_ingestion import render_text_ingestion
 from unravel.ui.constants import WidgetKeys
 from unravel.utils.ui import render_page_header, render_section_heading
 from unravel.utils.web_scraper import (
@@ -307,7 +308,7 @@ def render_upload_step() -> None:
 
     render_page_header(
         "Add source material",
-        "Upload a local document or scrape web content to seed the RAG pipeline.",
+        "Upload a document, paste text, or scrape web content to seed the RAG pipeline.",
         "Upload",
     )
 
@@ -334,7 +335,7 @@ def render_upload_step() -> None:
             # In normal mode, allow choosing between file upload and URL scraping
             source_mode = st.segmented_control(
                 "Source",
-                options=["File upload", "URL scraping"],
+                options=["File upload", "Paste text", "URL scraping"],
                 default="File upload",
                 label_visibility="collapsed",
             )
@@ -404,6 +405,8 @@ def render_upload_step() -> None:
                         except Exception as e:
                             st.error(f"Failed to upload {uploaded_file.name}: {str(e)}")
 
+            elif source_mode == "Paste text":
+                render_text_ingestion()
             else:
                 _render_url_scraping()
 
@@ -498,6 +501,6 @@ def render_upload_step() -> None:
     else:
         if not is_demo_mode:
             st.info(
-                "No document uploaded yet. Use the file uploader above to add a document.",
+                "No document added yet. Upload a file, paste text, or scrape a URL above.",
                 icon=":material/info:",
             )

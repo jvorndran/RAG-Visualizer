@@ -72,6 +72,8 @@ unravel
 
 This opens the app in your browser at `http://localhost:8501`.
 
+In **Upload**, choose **Paste text** to add a source without creating a file first. Paste plain text and click **Add text** to replace the current document with a UTF-8 TXT source. Blank submissions leave the current document unchanged. Whitespace and Unicode are preserved; changed text receives a new document identity so parsing caches cannot reuse an earlier paste. Then continue to **Chunks** to parse and split it as usual. Pasted text is available in local mode.
+
 ### LLM Setup
 
 Unravel can use **hosted LLM providers** (API key) or a **local/self-hosted LLM** (OpenAI-compatible server).
