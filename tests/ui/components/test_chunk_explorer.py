@@ -18,6 +18,34 @@ def test_literal_unicode_search_keeps_original_indices_and_inputs():
     assert chunks == before
 
 
+def test_size_sorting_is_stable_preserves_identity_and_composes_with_filters():
+    chunks = [SimpleNamespace(text=text, start_index=i, end_index=i + len(text))
+              for i, text in enumerate(["xx", "", "long text", "yy", "xx"])]
+    before = deepcopy(chunks)
+    assert matching_chunk_indices(chunks, "", sort_order="Shortest first") == [1, 0, 3, 4, 2]
+    assert matching_chunk_indices(chunks, "", sort_order="Longest first") == [2, 0, 3, 4, 1]
+    assert matching_chunk_indices(chunks, "", 2, 2, True, "Longest first") == [0, 4]
+    assert matching_chunk_indices(chunks, "text", sort_order="Shortest first") == [2]
+    assert matching_chunk_indices([], "", sort_order="Longest first") == []
+    assert chunks == before
+
+
+def test_sorted_export_matches_inspection_order_without_renumbering():
+    from unravel.ui.components.chunk_explorer import serialize_chunk_selection
+
+    chunks = [SimpleNamespace(text=text, start_index=i, end_index=i + len(text))
+              for i, text in enumerate(["é", "long text", "xy"])]
+    output = json.loads(serialize_chunk_selection(
+        chunks, "", "doc.txt", sort_order="Longest first"
+    ))
+    assert output["sort_order"] == "Longest first"
+    assert [row["chunk_number"] for row in output["chunks"]] == [2, 3, 1]
+    assert output["chunks"][0] == {
+        "chunk_number": 2, "text": "long text", "start_index": 1, "end_index": 10
+    }
+    assert json.loads(serialize_chunk_selection(chunks, "", None))["sort_order"] == "Original order"
+
+
 def test_size_bounds_are_inclusive_use_raw_characters_and_compose_with_search():
     chunks = [SimpleNamespace(text=text) for text in ["", "é", "Straße", "STRASSE", "long text"]]
     before = deepcopy(chunks)
@@ -87,6 +115,38 @@ chunks = [SimpleNamespace(text=text, start_index=i * 100, end_index=i * 100 + le
     for i, text in enumerate(["First", "# Heading", "Straße\\n" + "x" * 10000])]
 render_chunk_explorer(chunks, st.session_state.get("generation", "first"))
 '''
+
+
+def test_sort_control_invalidates_exports_and_resets_for_a_new_generation():
+    from unittest.mock import patch
+
+    with patch("unravel.ui.components.chunk_explorer.st.download_button") as download:
+        app = AppTest.from_string(SCRIPT).run()
+        app.button[0].click().run()
+        previous_downloads = download.call_count
+        app.radio[0].set_value("Longest first").run()
+        assert not app.exception
+        assert app.selectbox[0].value == 2
+        assert "Chunk 3" in app.selectbox[0].options[0]
+        assert download.call_count == previous_downloads
+        app.selectbox[0].select(1).run()
+        assert app.code[0].value == "# Heading"
+        app.button[0].click().run()
+        exported = json.loads(download.call_args.kwargs["data"])
+        assert exported["sort_order"] == "Longest first"
+        assert [chunk["chunk_number"] for chunk in exported["chunks"]] == [3, 2, 1]
+        app.text_input[0].set_value("missing").run()
+        assert not app.selectbox
+        assert app.button[0].disabled
+        app.text_input[0].set_value("").run()
+        assert app.selectbox[0].value == 2
+        app.radio[0].set_value("Shortest first").run()
+        assert app.selectbox[0].value == 0
+        app.session_state["generation"] = "second"
+        app.run()
+        assert app.radio[0].value == "Original order"
+        assert app.selectbox[0].value == 0
+        assert "chunk_explorer_prepared_export" not in app.session_state
 
 
 def test_repeated_text_control_invalidates_exports_recovers_and_resets_with_generation():
