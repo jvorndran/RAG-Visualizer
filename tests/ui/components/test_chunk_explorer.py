@@ -35,10 +35,14 @@ def test_sorted_export_matches_inspection_order_without_renumbering():
 
     chunks = [SimpleNamespace(text=text, start_index=i, end_index=i + len(text))
               for i, text in enumerate(["é", "long text", "xy"])]
-    output = json.loads(serialize_chunk_selection(chunks, "", "doc.txt", sort_order="Longest first"))
+    output = json.loads(serialize_chunk_selection(
+        chunks, "", "doc.txt", sort_order="Longest first"
+    ))
     assert output["sort_order"] == "Longest first"
     assert [row["chunk_number"] for row in output["chunks"]] == [2, 3, 1]
-    assert output["chunks"][0] == {"chunk_number": 2, "text": "long text", "start_index": 1, "end_index": 10}
+    assert output["chunks"][0] == {
+        "chunk_number": 2, "text": "long text", "start_index": 1, "end_index": 10
+    }
     assert json.loads(serialize_chunk_selection(chunks, "", None))["sort_order"] == "Original order"
 
 

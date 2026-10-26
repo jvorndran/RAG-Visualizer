@@ -153,7 +153,9 @@ def render_chunk_explorer(
             st.info("No matching chunks. Clear or change the filters to inspect other chunks.")
             return
 
-        selection = json.dumps([query, min_characters, max_characters, repeated_text_only, sort_order])
+        selection = json.dumps([
+            query, min_characters, max_characters, repeated_text_only, sort_order
+        ])
         query_key = hashlib.sha256(selection.encode("utf-8")).hexdigest()[:16]
         selected = st.selectbox(
             "Inspect chunk",
