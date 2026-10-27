@@ -53,8 +53,12 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
         st.caption(f"{retained} retained · {added} added · {removed} removed")
         change = st.selectbox(
             "Show changes",
-            options=["All changes", "Added", "Removed", "Retained"],
+            options=[
+                "All changes", "Added", "Removed", "Retained",
+                "Moved up", "Moved down", "Same rank",
+            ],
             key="retrieval_comparison_change",
+            help="Rank filters apply only to chunks present in both runs.",
         )
         search = st.text_input(
             "Find in comparison text",
@@ -68,7 +72,16 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
                 chunk = current.chunks[row["Current rank"] - 1]
             else:
                 chunk = baseline.chunks[row["Baseline rank"] - 1]
-            if (change == "All changes" or row["Change"] == change) and (
+            rank_change = row["Rank change"]
+            if rank_change is None:
+                movement = None
+            elif rank_change > 0:
+                movement = "Moved up"
+            elif rank_change < 0:
+                movement = "Moved down"
+            else:
+                movement = "Same rank"
+            if change in ("All changes", row["Change"], movement) and (
                 not search or search in chunk.text.casefold()
             ):
                 visible.append((row, chunk))

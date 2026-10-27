@@ -111,6 +111,90 @@ def test_filters_recover_after_empty_results_and_clear_with_baseline():
     assert app.text[0].value == "new"
 
 
+def test_rank_movement_filters_preserve_ranks_scores_and_full_text():
+    app = AppTest.from_string(APP)
+    app.session_state["results"] = [
+        (0, "down", 0.9), (1, "up", 0.8), (2, "same", 0.7), (3, "removed", 0.6)
+    ]
+    app.run()
+    app.button(key="retrieval_comparison_pin").click().run()
+    app.session_state["results"] = [
+        (1, "up", 0.1), (0, "down", 0.95), (2, "same", 0.2), (4, "added", 0.5)
+    ]
+    app.run()
+    for choice, index, before, after, text in [
+        ("Moved up", 1, 2, 1, "up"),
+        ("Moved down", 0, 1, 2, "down"),
+        ("Same rank", 2, 3, 3, "same"),
+    ]:
+        app.selectbox(key="retrieval_comparison_change").select(choice).run()
+        assert not app.exception
+        frame = app.dataframe[0].value
+        assert list(frame["Chunk"]) == [index]
+        assert list(frame["Change"]) == ["Retained"]
+        assert frame.iloc[0]["Baseline rank"] == before
+        assert frame.iloc[0]["Current rank"] == after
+        assert frame.iloc[0]["Rank change"] == before - after
+        assert app.text[0].value == text
+        assert any("3 retained · 1 added · 1 removed" in item.value for item in app.caption)
+        assert any("Showing 1 of 5" in item.value for item in app.caption)
+    app.selectbox(key="retrieval_comparison_change").select("Moved up").run()
+    assert app.dataframe[0].value.iloc[0]["Baseline score"] == 0.8
+    assert app.dataframe[0].value.iloc[0]["Current score"] == 0.1
+    assert len(app.session_state["retrieval_comparison_baseline"].chunks) == 4
+
+
+def test_rank_movement_filters_compose_with_literal_full_text_search():
+    original = "context " + "x" * 200 + " Straße [needle]"
+    app = AppTest.from_string(APP)
+    app.session_state["results"] = [(0, "first", 0.8), (1, original, 0.7)]
+    app.run()
+    app.button(key="retrieval_comparison_pin").click().run()
+    app.session_state["results"] = [(1, original, 0.2), (0, "first", 0.9)]
+    app.run()
+    app.selectbox(key="retrieval_comparison_change").select("Moved up").run()
+    app.text_input(key="retrieval_comparison_search").input(" STRASSE [NEEDLE] ").run()
+    assert not app.exception
+    assert list(app.dataframe[0].value["Chunk"]) == [1]
+    assert app.text[0].value == original
+    app.text_input(key="retrieval_comparison_search").input(".*").run()
+    assert len(app.dataframe) == 0
+    assert any("No comparison chunks match" in item.value for item in app.info)
+    app.text_input(key="retrieval_comparison_search").input("").run()
+    assert app.text[0].value == original
+
+
+def test_rank_filters_exclude_unmatched_chunks_and_recover_after_repin_and_clear():
+    app = AppTest.from_string(APP).run()
+    app.button(key="retrieval_comparison_pin").click().run()
+    app.session_state["results"] = [(0, "changed text", 0.5)]
+    app.run()
+    for choice in ["Moved up", "Moved down", "Same rank"]:
+        app.selectbox(key="retrieval_comparison_change").select(choice).run()
+        assert not app.exception
+        assert len(app.dataframe) == 0
+    app.session_state["results"] = []
+    app.run()
+    assert not app.exception
+    assert len(app.dataframe) == 0
+    app.selectbox(key="retrieval_comparison_change").select("All changes").run()
+    assert list(app.dataframe[0].value["Change"]) == ["Removed", "Removed"]
+    app.session_state["results"] = [(1, "second", 0.5)]
+    app.run()
+    app.selectbox(key="retrieval_comparison_change").select("Moved up").run()
+    assert app.text[0].value == "second"
+    app.button(key="retrieval_comparison_pin").click().run()
+    assert not app.exception
+    assert len(app.dataframe) == 0
+    app.selectbox(key="retrieval_comparison_change").select("Same rank").run()
+    assert app.text[0].value == "second"
+    app.button(key="retrieval_comparison_clear").click().run()
+    app.button(key="retrieval_comparison_pin").click().run()
+    assert not app.exception
+    assert app.selectbox(key="retrieval_comparison_change").value == "All changes"
+    assert app.text[0].value == "second"
+
+
 def test_inspector_shows_full_text_for_added_and_removed_chunks_with_reused_index():
     app = AppTest.from_string(APP)
     original = "old context\n" + "x" * 200 + "\nBASELINE END"
