@@ -118,3 +118,50 @@ def test_real_storage_round_trip_replaces_previous_document_in_isolated_director
         assert not app.exception
         assert get_current_document() == (app.session_state["doc_name"], text.encode("utf-8"))
         assert len(list((tmp_path / "documents").iterdir())) == 1
+
+
+def test_markdown_format_saves_exact_bytes_with_distinct_identity_and_parser_routing():
+    from unravel.utils.parsers import parse_document
+
+    text = "# Straße\n\n**bold** and [link](https://example.com)\n尾\t "
+    content = text.encode("utf-8")
+    stem = f"pasted-{hashlib.sha256(content).hexdigest()}"
+    with patch("unravel.ui.components.text_ingestion.save_document",
+               return_value=Path("/isolated/document")) as save:
+        app = AppTest.from_string(SCRIPT).run(timeout=30)
+        app.text_area[0].set_value(text)
+        app.button[0].click().run(timeout=30)
+        assert app.session_state["doc_name"] == f"{stem}.txt"
+        save.reset_mock()
+        app.selectbox[0].select("Markdown").run(timeout=30)
+        save.assert_not_called()
+        assert app.session_state["doc_name"] == f"{stem}.txt"
+        app.button[0].click().run(timeout=30)
+        assert not app.exception
+        save.assert_called_once_with(f"{stem}.md", content)
+        assert app.session_state["document_metadata"]["format"] == "MD"
+        assert app.session_state["doc_name"] == f"{stem}.md"
+        with patch("unravel.utils.parsers.parse_markdown", return_value="parsed") as parser:
+            assert parse_document(f"{stem}.md", content) == ("parsed", "Markdown", [])
+            parser.assert_called_once()
+            assert parser.call_args.args[0] == content
+        app.selectbox[0].select("Plain text")
+        app.button[0].click().run(timeout=30)
+        assert app.session_state["doc_name"] == f"{stem}.txt"
+
+
+def test_markdown_storage_failure_preserves_format_draft_and_previous_pipeline():
+    with patch("unravel.ui.components.text_ingestion.save_document",
+               side_effect=OSError("disk unavailable")) as save:
+        app = AppTest.from_string(SCRIPT).run(timeout=30)
+        app.session_state["doc_name"] = "previous.txt"
+        app.session_state["chunks"] = ["keep"]
+        app.text_area[0].set_value("# Draft")
+        app.selectbox[0].select("Markdown")
+        app.button[0].click().run(timeout=30)
+        assert not app.exception
+        assert save.call_args.args[0].endswith(".md")
+        assert app.selectbox[0].value == "Markdown"
+        assert app.text_area[0].value == "# Draft"
+        assert app.session_state["doc_name"] == "previous.txt"
+        assert app.session_state["chunks"] == ["keep"]

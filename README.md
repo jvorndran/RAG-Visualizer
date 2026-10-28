@@ -72,7 +72,7 @@ unravel
 
 This opens the app in your browser at `http://localhost:8501`.
 
-In **Upload**, choose **Paste text** to add a source without creating a file first. Paste plain text and click **Add text** to replace the current document with a UTF-8 TXT source. Blank submissions leave the current document unchanged. Whitespace and Unicode are preserved; changed text receives a new document identity so parsing caches cannot reuse an earlier paste. Then continue to **Chunks** to parse and split it as usual. Pasted text is available in local mode.
+In **Upload**, choose **Paste text** to add a source without creating a file first. Choose **Plain text** or **Markdown** as the source format, then click **Add text** to replace the current document with a UTF-8 TXT or MD source. Markdown uses the existing Markdown parser and parsing controls. Blank submissions leave the current document unchanged. Whitespace and Unicode are preserved; changed text or format receives a distinct document identity so parsing caches cannot reuse an earlier paste. Then continue to **Chunks** to parse and split it as usual. Pasted text is available in local mode.
 
 ### LLM Setup
 
