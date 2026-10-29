@@ -187,14 +187,33 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
         help="Case-insensitive text search within this run. Filters the displayed cards only; "
         "the answer and pinned comparison retain the complete retrieved context.",
     ).strip().casefold()
+    first_column, last_column = st.columns(2)
+    with first_column:
+        first_rank = st.number_input(
+            "First displayed rank", min_value=1, value=1, step=1,
+            key="retrieved_context_first_rank",
+            help="Inclusive retrieval rank. Filters displayed cards only.",
+        ) or 1
+    with last_column:
+        last_rank = st.number_input(
+            "Last displayed rank", min_value=1, value=None, step=1,
+            placeholder="No limit", key="retrieved_context_last_rank",
+            help="Inclusive retrieval rank. Leave empty to inspect through the last result.",
+        )
+    if last_rank is not None and first_rank > last_rank:
+        st.error("First displayed rank must not exceed last displayed rank.")
+        return
     ranked_results = [
         (rank, result)
         for rank, result in enumerate(results, 1)
-        if not search_text or search_text in result.text.casefold()
+        if rank >= first_rank and (last_rank is None or rank <= last_rank)
+        and (not search_text or search_text in result.text.casefold())
     ]
     st.caption(f"Showing {len(ranked_results)} of {len(results)} retrieved chunks.")
     if not ranked_results:
-        st.info("No retrieved chunks match this text. Clear the search to show all context.")
+        st.info(
+            "No retrieved chunks match these filters. Clear the search or widen the rank range."
+        )
         return
 
     # Convert search results to chunks for the viewer
