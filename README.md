@@ -167,6 +167,8 @@ Flexible text splitting with transparent, visual chunk inspection:
 - 🎴 **Visual Chunk Cards**: Display full text with section breadcrumbs, metadata badges, and overlap highlighting
 - 👁️ **Context Preview**: Expandable previews showing how chunks overlap with neighbors for seamless retrieval
 
+The chunk explorer's Element types control filters by reported metadata labels, such as table or code. Selecting several labels includes chunks with any selected label, including chunks that report multiple types. Leave it empty to include all chunks and those without element metadata. This filter composes with search, size bounds, repeated text, and sorting. JSON downloads record `element_types`; changing the selection clears a prepared download. Original chunk identities, metadata, and pipeline inputs stay intact.
+
 ### Step 3: Embedding Explorer 🧭
 Visualize and analyze your document embeddings:
 - 🤖 **10+ Embedding Models**: Choose from sentence-transformers models (all-MiniLM, all-mpnet, paraphrase variants), multilingual, QA-optimized, and BGE embeddings
