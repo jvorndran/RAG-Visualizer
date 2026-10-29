@@ -63,8 +63,9 @@ render_chunks_step()
 
 def test_text_explorer_rerun_keeps_generated_chunks_and_cache(chunks_app_script):
     chunks = [
-        Chunk(text="First", metadata={}, start_index=0, end_index=5),
-        Chunk(text="Needle in second chunk", metadata={}, start_index=5, end_index=27),
+        Chunk(text="First", metadata={"element_type": "paragraph"}, start_index=0, end_index=5),
+        Chunk(text="Needle in second chunk", metadata={"element_type": "table"},
+              start_index=5, end_index=27),
     ]
     script = chunks_app_script.replace(
         'st.session_state.doc_name = None', 'st.session_state.doc_name = "test.pdf"'
@@ -86,6 +87,8 @@ def test_text_explorer_rerun_keeps_generated_chunks_and_cache(chunks_app_script)
         minimum.set_value(10).run(timeout=30)
         maximum = next(widget for widget in app.number_input if widget.label == "Maximum characters")
         maximum.set_value(30).run(timeout=30)
+        elements = next(widget for widget in app.multiselect if widget.label == "Element types")
+        elements.set_value(["table"]).run(timeout=30)
         assert not app.exception
         prepare = next(widget for widget in app.button if widget.label == "Prepare JSON download")
         prepare.click().run(timeout=30)
@@ -105,6 +108,7 @@ def test_text_explorer_rerun_keeps_generated_chunks_and_cache(chunks_app_script)
         assert exported["count"] == 1
         assert exported["min_characters"] == 10
         assert exported["max_characters"] == 30
+        assert exported["element_types"] == ["table"]
         assert exported["chunks"][0]["chunk_number"] == 2
 
 

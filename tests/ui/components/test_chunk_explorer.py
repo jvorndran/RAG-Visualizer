@@ -7,6 +7,59 @@ from streamlit.testing.v1 import AppTest
 from unravel.ui.components.chunk_explorer import matching_chunk_indices
 
 
+def test_element_types_match_any_reported_label_and_compose_with_other_filters():
+    from unravel.ui.components.chunk_explorer import serialize_chunk_selection
+
+    chunks = [SimpleNamespace(text=text, metadata=metadata, start_index=i, end_index=i + len(text))
+              for i, (text, metadata) in enumerate([
+                  ("Needle", {"element_type": "table"}),
+                  ("Needle", {"element_type": ["paragraph", "code"]}),
+                  ("Needle", {}), ("Long needle", {"element_type": "table"}),
+                  ("Other", {"element_type": None}),
+              ])]
+    before = deepcopy(chunks)
+    assert matching_chunk_indices(chunks, "", element_types=["code"]) == [1]
+    assert matching_chunk_indices(chunks, "", element_types=["table", "code"]) == [0, 1, 3]
+    assert matching_chunk_indices(chunks, "needle", 6, 6, True, element_types=["table"]) == [0]
+    assert matching_chunk_indices(chunks, "", element_types=["unknown"]) == []
+    assert matching_chunk_indices(chunks, "", element_types=[]) == list(range(5))
+    output = json.loads(serialize_chunk_selection(
+        chunks, "needle", "doc.pdf", sort_order="Longest first", element_types=["table"]
+    ))
+    assert output["element_types"] == ["table"]
+    assert [row["chunk_number"] for row in output["chunks"]] == [4, 1]
+    assert json.loads(serialize_chunk_selection(chunks, "", None))["element_types"] == []
+    assert chunks == before
+
+
+def test_element_type_control_invalidates_download_and_resets_with_generation():
+    from unittest.mock import patch
+
+    script = SCRIPT.replace(
+        '"chunk_index": i', '"chunk_index": i, "element_type": ["table", "code"][i % 2]'
+    )
+    with patch("unravel.ui.components.chunk_explorer.st.download_button") as download:
+        app = AppTest.from_string(script).run(timeout=30)
+        assert not app.exception
+        assert app.multiselect[0].options == ["code", "table"]
+        app.button[0].click().run()
+        downloads = download.call_count
+        app.multiselect[0].set_value(["code"]).run()
+        assert not app.exception
+        assert download.call_count == downloads
+        assert app.selectbox[0].value == 1
+        app.button[0].click().run()
+        assert json.loads(download.call_args.kwargs["data"])["element_types"] == ["code"]
+        app.text_input[0].set_value("missing").run()
+        assert not app.selectbox and app.button[0].disabled
+        app.text_input[0].set_value("").run()
+        app.session_state["generation"] = "next"
+        app.run()
+        assert app.multiselect[0].value == []
+        assert len(app.selectbox[0].options) == 3
+        assert "chunk_explorer_prepared_export" not in app.session_state
+
+
 def test_literal_unicode_search_keeps_original_indices_and_inputs():
     chunks = [SimpleNamespace(text=text) for text in ["", "Straße\nDetails", "[Raw]", "STRASSE"]]
     before = deepcopy(chunks)

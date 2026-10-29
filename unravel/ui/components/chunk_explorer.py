@@ -8,10 +8,21 @@ from typing import Any
 import streamlit as st
 
 
+def chunk_element_types(chunk: Any) -> set[str]:
+    """Read available element labels, including chunks containing multiple types."""
+    value = getattr(chunk, "metadata", {}).get("element_type")
+    if isinstance(value, str):
+        return {value} if value else set()
+    if isinstance(value, (list, tuple, set)):
+        return {label for label in value if isinstance(label, str) and label}
+    return set()
+
+
 def matching_chunk_indices(
     chunks: list[Any], query: str, min_characters: int = 0, max_characters: int | None = None,
     repeated_text_only: bool = False,
     sort_order: str = "Original order",
+    element_types: list[str] | None = None,
 ) -> list[int]:
     """Return original indices matching text, size, and optional exact-repeat filters."""
     needle = query.strip().casefold()
@@ -22,6 +33,7 @@ def matching_chunk_indices(
         and (max_characters is None or len(chunk.text) <= max_characters)
         and needle in chunk.text.casefold()
         and (text_counts is None or text_counts[chunk.text] > 1)
+        and (not element_types or chunk_element_types(chunk).intersection(element_types))
     ]
     if sort_order == "Shortest first":
         indices.sort(key=lambda index: len(chunks[index].text))
@@ -35,10 +47,11 @@ def serialize_chunk_selection(
     min_characters: int = 0, max_characters: int | None = None,
     repeated_text_only: bool = False,
     sort_order: str = "Original order",
+    element_types: list[str] | None = None,
 ) -> str:
     """Export matching text and offsets; exclude arbitrary metadata and configuration."""
     indices = matching_chunk_indices(
-        chunks, query, min_characters, max_characters, repeated_text_only, sort_order
+        chunks, query, min_characters, max_characters, repeated_text_only, sort_order, element_types
     )
     payload = {
         "schema_version": 1,
@@ -49,6 +62,7 @@ def serialize_chunk_selection(
         "max_characters": max_characters,
         "repeated_text_only": repeated_text_only,
         "sort_order": sort_order,
+        "element_types": element_types or [],
         "total_chunks": len(chunks),
         "count": len(indices),
         "chunks": [
@@ -95,6 +109,15 @@ def render_chunk_explorer(
                 "Raw text must match exactly, including case, whitespace, and empty text."
             ),
         )
+        element_types = st.multiselect(
+            "Element types",
+            options=sorted({label for chunk in chunks for label in chunk_element_types(chunk)}),
+            key=f"chunk_explorer_element_types_{state_key}",
+            help=(
+                "Match any selected metadata label, such as table or code. "
+                "Leave empty to include all chunks, including those without element metadata."
+            ),
+        )
         sort_order = st.radio(
             "Order matching chunks",
             options=["Original order", "Shortest first", "Longest first"],
@@ -110,6 +133,7 @@ def render_chunk_explorer(
             or prepared.get("max_characters") != max_characters
             or prepared.get("repeated_text_only", False) != repeated_text_only
             or prepared.get("sort_order", "Original order") != sort_order
+            or prepared.get("element_types", []) != element_types
         ):
             st.session_state.pop(export_key)
             prepared = None
@@ -117,7 +141,8 @@ def render_chunk_explorer(
             st.error("Minimum characters must not exceed maximum characters.")
             return
         indices = matching_chunk_indices(
-            chunks, query, min_characters, max_characters, repeated_text_only, sort_order
+            chunks, query, min_characters, max_characters, repeated_text_only, sort_order,
+            element_types
         )
         st.caption(
             f"{len(indices)} of {len(chunks)} chunks match. Original chunk numbers are retained."
@@ -134,9 +159,10 @@ def render_chunk_explorer(
                 "max_characters": max_characters,
                 "repeated_text_only": repeated_text_only,
                 "sort_order": sort_order,
+                "element_types": element_types,
                 "data": serialize_chunk_selection(
                     chunks, query, document_name, min_characters, max_characters,
-                    repeated_text_only, sort_order
+                    repeated_text_only, sort_order, element_types
                 ),
             }
             st.session_state[export_key] = prepared
@@ -154,7 +180,7 @@ def render_chunk_explorer(
             return
 
         selection = json.dumps([
-            query, min_characters, max_characters, repeated_text_only, sort_order
+            query, min_characters, max_characters, repeated_text_only, sort_order, element_types
         ])
         query_key = hashlib.sha256(selection.encode("utf-8")).hexdigest()[:16]
         selected = st.selectbox(

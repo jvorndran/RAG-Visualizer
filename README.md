@@ -167,6 +167,8 @@ Flexible text splitting with transparent, visual chunk inspection:
 - 🎴 **Visual Chunk Cards**: Display full text with section breadcrumbs, metadata badges, and overlap highlighting
 - 👁️ **Context Preview**: Expandable previews showing how chunks overlap with neighbors for seamless retrieval
 
+The chunk explorer's Element types control filters by reported metadata labels, such as table or code. Selecting several labels includes chunks with any selected label, including chunks that report multiple types. Leave it empty to include all chunks and those without element metadata. This filter composes with search, size bounds, repeated text, and sorting. JSON downloads record `element_types`; changing the selection clears a prepared download. Original chunk identities, metadata, and pipeline inputs stay intact.
+
 ### Step 3: Embedding Explorer 🧭
 Visualize and analyze your document embeddings:
 - 🤖 **10+ Embedding Models**: Choose from sentence-transformers models (all-MiniLM, all-mpnet, paraphrase variants), multilingual, QA-optimized, and BGE embeddings
@@ -265,7 +267,9 @@ MIT License - see LICENSE file for details.
 
 ## Compare retrieved context
 
-Use **Find in retrieved context** in the Query step to search this run's chunk text with case-insensitive substring matching. The count shows how many cards match, and each card retains its original retrieval rank and scores. Clear the search to restore every card. This inspection control runs locally; the generated answer and pinned comparison retain all retrieved chunks.
+Use **Find in retrieved context** in the Query step to search this run's chunk text with case-insensitive substring matching. The count shows how many cards match, and each card retains its original retrieval rank and scores. With default rank bounds, clearing the search restores every card. This inspection control runs locally; the generated answer and pinned comparison retain all retrieved chunks.
+
+First displayed rank and Last displayed rank narrow the cards to an inclusive retrieval-rank window and compose with text search. Leave the last rank empty for no upper bound; the first rank defaults to one. Reversed bounds show an error until corrected. Cards keep their original ranks and scores, and a window beyond the available results shows no matches. These controls leave answers, pinned snapshots, and complete experiment downloads unchanged.
 
 After asking a query, open **Compare retrieval runs** in the Query step and select **Pin current run as baseline**. Change the query, retrieval strategy, top k, minimum score, or reranking settings, then click **Ask** again. The table shows retained, added, and removed chunks with both ranks and scores; a positive rank change means the chunk moved up. Scores remain on their original scales and should not be compared numerically across retrievers or rerankers.
 
