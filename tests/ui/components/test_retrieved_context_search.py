@@ -21,6 +21,7 @@ st.session_state.current_query = "original query"
 st.session_state.last_search_results = results
 st.session_state.rendered_texts = []
 st.session_state.rendered_badges = []
+st.session_state.retrieval_downloads = {}
 
 def prepare(chunks, **kwargs):
     st.session_state.rendered_texts = [chunk.text for chunk in chunks]
@@ -31,7 +32,9 @@ def render(**kwargs):
     st.session_state.rendered_badges = kwargs["custom_badges"]
 
 def download(**kwargs):
-    st.session_state.retrieval_download_data = kwargs["data"]
+    st.session_state.retrieval_downloads[kwargs["key"]] = kwargs["data"]
+    if kwargs["key"] == "retrieval_experiment_download":
+        st.session_state.retrieval_download_data = kwargs["data"]
 
 with patch("unravel.ui.steps.query.prepare_chunk_display_data", side_effect=prepare), \\
      patch("unravel.ui.steps.query.render_chunk_cards", side_effect=render), \\
