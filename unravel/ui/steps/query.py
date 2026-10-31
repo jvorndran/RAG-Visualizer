@@ -28,7 +28,10 @@ from unravel.ui.components.chunk_viewer import (
     render_chunk_cards,
 )
 from unravel.ui.components.retrieval_comparison import render_retrieval_comparison
-from unravel.ui.components.retrieval_export import render_retrieval_export
+from unravel.ui.components.retrieval_export import (
+    render_context_text_export,
+    render_retrieval_export,
+)
 from unravel.ui.constants import WidgetKeys, get_threshold_slider_key
 from unravel.utils.ui import render_page_header, render_section_heading
 
@@ -215,6 +218,8 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
             "No retrieved chunks match these filters. Clear the search or widen the rank range."
         )
         return
+
+    render_context_text_export(ranked_results)
 
     # Convert search results to chunks for the viewer
     from dataclasses import dataclass
