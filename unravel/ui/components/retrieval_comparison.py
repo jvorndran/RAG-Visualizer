@@ -66,6 +66,14 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             help="Search full chunk text, including removed baseline context. "
             "Filters only this inspection view; snapshots and downloads stay complete.",
         ).strip().casefold()
+        order = st.radio(
+            "Order comparison chunks",
+            options=["Current retrieval order", "Baseline rank", "Largest rank movement"],
+            key="retrieval_comparison_order",
+            horizontal=True,
+            help="Reorder this view only. Chunks without a baseline rank or rank change sort last; "
+            "ties keep their current retrieval order. Original ranks and downloads stay unchanged.",
+        )
         visible = []
         for row in rows:
             if row["Current rank"] is not None:
@@ -85,6 +93,15 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
                 not search or search in chunk.text.casefold()
             ):
                 visible.append((row, chunk))
+
+        if order == "Baseline rank":
+            visible.sort(key=lambda item: (
+                item[0]["Baseline rank"] is None, item[0]["Baseline rank"] or 0
+            ))
+        elif order == "Largest rank movement":
+            visible.sort(key=lambda item: (
+                item[0]["Rank change"] is None, -abs(item[0]["Rank change"] or 0)
+            ))
 
         st.caption(f"Showing {len(visible)} of {len(rows)} comparison chunks.")
         if visible:
