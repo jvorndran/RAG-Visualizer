@@ -237,6 +237,55 @@ def test_inspector_follows_original_ranks_and_handles_fewer_results_and_clear():
     assert not app.exception
 
 
+def test_comparison_order_preserves_ranks_ties_and_full_text_inspection():
+    app = AppTest.from_string(APP)
+    app.session_state["results"] = [
+        (0, "first", 0.9), (1, "second", 0.8), (2, "third", 0.7), (3, "fourth", 0.6),
+    ]
+    app.run().button(key="retrieval_comparison_pin").click().run()
+    app.session_state["results"] = [
+        (2, "third", 0.8), (1, "second", 0.7), (0, "first", 0.6), (4, "added", 0.5),
+    ]
+    app.run()
+    original = app.dataframe[0].value.copy()
+    baseline = app.session_state["retrieval_comparison_baseline"]
+    app.radio(key="retrieval_comparison_order").set_value("Baseline rank").run()
+    frame = app.dataframe[0].value
+    assert list(frame["Chunk"]) == [0, 1, 2, 3, 4]
+    assert list(frame["Change"]) == ["Retained", "Retained", "Retained", "Removed", "Added"]
+    assert frame.iloc[0]["Current rank"] == 3
+    assert app.text[0].value == "first"
+    app.radio(key="retrieval_comparison_order").set_value("Largest rank movement").run()
+    frame = app.dataframe[0].value
+    assert list(frame["Chunk"]) == [2, 0, 1, 4, 3]
+    assert list(frame["Rank change"][:3]) == [2, -2, 0]
+    app.selectbox(key="retrieval_comparison_inspect").select(1).run()
+    assert app.text[0].value == "first"
+    assert app.session_state["retrieval_comparison_baseline"] == baseline
+    app.radio(key="retrieval_comparison_order").set_value("Current retrieval order").run()
+    assert app.dataframe[0].value.equals(original)
+    assert not app.exception
+
+
+def test_comparison_order_composes_with_filters_and_resets_after_clear():
+    app = AppTest.from_string(APP).run()
+    app.button(key="retrieval_comparison_pin").click().run()
+    app.session_state["results"] = [(1, "second", 0.7), (9, "new", 0.5)]
+    app.run()
+    app.radio(key="retrieval_comparison_order").set_value("Baseline rank").run()
+    app.selectbox(key="retrieval_comparison_change").select("Removed").run()
+    assert app.text[0].value == "first"
+    app.text_input(key="retrieval_comparison_search").input("missing").run()
+    assert len(app.dataframe) == 0
+    app.text_input(key="retrieval_comparison_search").input("").run()
+    assert app.text[0].value == "first"
+    app.button(key="retrieval_comparison_clear").click().run()
+    assert len(app.radio) == 0
+    app.button(key="retrieval_comparison_pin").click().run()
+    assert app.radio(key="retrieval_comparison_order").value == "Current retrieval order"
+    assert not app.exception
+
+
 QUERY_APP = """
 from types import SimpleNamespace
 from unittest.mock import patch
