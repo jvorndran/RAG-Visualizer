@@ -94,6 +94,11 @@ def serialize_chunk_selection(
     return json.dumps(payload, ensure_ascii=False, allow_nan=False, indent=2) + "\n"
 
 
+def serialize_chunk_text(chunks: list[Any], indices: list[int]) -> str:
+    """Bundle full raw text in inspection order with original chunk numbers."""
+    return "\n\n---\n\n".join(f"Chunk {index + 1}\n\n{chunks[index].text}" for index in indices)
+
+
 def render_chunk_explorer(
     chunks: list[Any], state_key: str, document_name: str | None = None
 ) -> None:
@@ -153,7 +158,8 @@ def render_chunk_explorer(
         export_key = "chunk_explorer_prepared_export"
         prepared = st.session_state.get(export_key)
         if prepared and (
-            prepared["generation"] != state_key or prepared["query"] != query
+            "text_data" not in prepared
+            or prepared["generation"] != state_key or prepared["query"] != query
             or prepared.get("min_characters") != min_characters
             or prepared.get("max_characters") != max_characters
             or prepared.get("repeated_text_only", False) != repeated_text_only
@@ -191,9 +197,18 @@ def render_chunk_explorer(
                     chunks, query, document_name, min_characters, max_characters,
                     repeated_text_only, sort_order, element_types, sections
                 ),
+                "text_data": serialize_chunk_text(chunks, indices),
             }
             st.session_state[export_key] = prepared
         if prepared:
+            st.download_button(
+                "Download matching chunks as text",
+                data=prepared["text_data"],
+                file_name="chunks.txt",
+                mime="text/plain; charset=utf-8",
+                key=f"chunk_explorer_text_download_{state_key}",
+                help="Download full raw text in the selected order with original chunk numbers.",
+            )
             st.download_button(
                 "Download matching chunks",
                 data=prepared["data"],
