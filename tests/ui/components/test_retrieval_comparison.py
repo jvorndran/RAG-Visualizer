@@ -1,5 +1,7 @@
 """Exercise the baseline controls without embeddings, provider calls, or an LLM."""
 
+from unittest.mock import patch
+
 from streamlit.testing.v1 import AppTest
 
 APP = """
@@ -17,7 +19,7 @@ render_retrieval_comparison(current)
 
 
 def test_pin_compare_clear_and_replace_baseline():
-    app = AppTest.from_string(APP).run()
+    app = AppTest.from_string(APP, default_timeout=30).run()
     assert not app.exception
     app.button(key="retrieval_comparison_pin").click().run()
     assert not app.exception
@@ -286,6 +288,45 @@ def test_comparison_order_composes_with_filters_and_resets_after_clear():
     assert not app.exception
 
 
+def test_visible_comparison_text_download_tracks_filters_order_and_removed_text():
+    original = "  Straße\n\t" + "x" * 200 + " [needle]"
+    app = AppTest.from_string(APP)
+    app.session_state["results"] = [(0, original, 0.8), (1, "second", 0.6)]
+    with patch("unravel.ui.components.retrieval_comparison.st.download_button") as download:
+        app.run(timeout=30)
+        download.assert_not_called()
+        app.button(key="retrieval_comparison_pin").click().run()
+        app.session_state["results"] = [(1, "second", 0.7), (9, "new", 0.5)]
+        app.run()
+        app.radio(key="retrieval_comparison_order").set_value("Baseline rank").run()
+        payload = download.call_args.kwargs
+        assert payload["file_name"] == "retrieval-comparison.txt"
+        assert payload["mime"] == "text/plain; charset=utf-8"
+        document = payload["data"]
+        assert document.index("Chunk index 0") < document.index("Chunk index 1")
+        assert document.index("Chunk index 1") < document.index("Chunk index 9")
+        assert (
+            "Chunk index 0 | Removed\nBaseline rank 1 | Current rank —\n\n" + original
+        ) in document
+        assert "Chunk index 1 | Retained\nBaseline rank 2 | Current rank 1" in document
+        app.text_input(key="retrieval_comparison_search").input("[needle]").run()
+        document = download.call_args.kwargs["data"]
+        assert original in document
+        assert "Chunk index 1" not in document
+        assert "Chunk index 9" not in document
+        calls = download.call_count
+        app.selectbox(key="retrieval_comparison_change").select("Added").run()
+        assert download.call_count == calls
+        app.text_input(key="retrieval_comparison_search").input("").run()
+        assert "Chunk index 9 | Added" in download.call_args.kwargs["data"]
+        assert app.session_state["retrieval_comparison_baseline"].chunks[0].text == original
+        app.button(key="retrieval_comparison_clear").click().run()
+        calls = download.call_count
+        app.run()
+        assert download.call_count == calls
+        assert not app.exception
+
+
 QUERY_APP = """
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -335,4 +376,6 @@ def test_query_view_offers_experiment_download_alongside_baseline_controls() -> 
     assert [button.label for button in app.get("download_button")] == expected_downloads
     app.button(key="retrieval_comparison_pin").click().run()
     assert not app.exception
-    assert [button.label for button in app.get("download_button")] == expected_downloads
+    assert [button.label for button in app.get("download_button")] == [
+        "Download visible comparison as text", *expected_downloads
+    ]

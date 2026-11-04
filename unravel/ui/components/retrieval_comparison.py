@@ -64,7 +64,7 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             "Find in comparison text",
             key="retrieval_comparison_search",
             help="Search full chunk text, including removed baseline context. "
-            "Filters only this inspection view; snapshots and downloads stay complete.",
+            "Filters only this inspection view; snapshots and experiment downloads stay complete.",
         ).strip().casefold()
         order = st.radio(
             "Order comparison chunks",
@@ -107,6 +107,24 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
         if visible:
             visible_rows = [row for row, _chunk in visible]
             st.dataframe(visible_rows, hide_index=True, use_container_width=True)
+            document = (
+                f"Baseline query: {baseline.query}\nCurrent query: {current.query}\n\n"
+                + "\n\n---\n\n".join(
+                    f"Chunk index {row['Chunk']} | {row['Change']}\n"
+                    f"Baseline rank {row['Baseline rank'] or '—'} | "
+                    f"Current rank {row['Current rank'] or '—'}\n\n{chunk.text}"
+                    for row, chunk in visible
+                )
+            )
+            st.download_button(
+                label="Download visible comparison as text",
+                data=document,
+                file_name="retrieval-comparison.txt",
+                mime="text/plain; charset=utf-8",
+                key="retrieval_comparison_text_download",
+                help="Full raw text in this view's filtered order, with change types, "
+                "original chunk indices and ranks. Includes removed baseline context.",
+            )
             selected = st.selectbox(
                 "Inspect full chunk text",
                 options=range(len(visible)),
