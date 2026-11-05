@@ -142,3 +142,40 @@ def test_real_cards_include_header_only_context_with_matching_rank_and_score():
     assert "Rank: 2</span>" in cards and "Rank: 1</span>" not in cards
     assert "0.5000" in cards and "0.9000" not in cards
     assert not app.exception
+
+
+def test_context_length_order_keeps_original_ranks_and_downloads_complete():
+    app = AppTest.from_string(APP).run(timeout=60)
+    app.selectbox(key="retrieved_context_order").select("Longest text first").run()
+    assert not app.exception
+    assert app.session_state["rendered_positions"] == [1, 2, 0]
+    assert [
+        badges[0]["value"] for badges in app.session_state["rendered_badges"]
+    ] == ["2", "3", "1"]
+    text = app.session_state["retrieval_downloads"]["retrieved_context_text_download"]
+    assert text.index("Rank 2 |") < text.index("Rank 3 |") < text.index("Rank 1 |")
+    complete = json.loads(app.session_state["retrieval_download_data"])
+    assert [chunk["rank"] for chunk in complete["current"]["chunks"]] == [1, 2, 3]
+    app.number_input(key="retrieved_context_first_rank").set_value(2).run()
+    app.selectbox(key="retrieved_context_order").select("Shortest text first").run()
+    assert app.session_state["rendered_positions"] == [2, 1]
+    app.text_input(key="retrieved_context_search").input("RISK").run()
+    assert app.session_state["rendered_positions"] == [1]
+    app.text_input(key="retrieved_context_search").input("absent").run()
+    assert app.session_state["rendered_texts"] == []
+    app.text_input(key="retrieved_context_search").input("").run()
+    app.selectbox(key="retrieved_context_order").select("Retrieval rank").run()
+    assert app.session_state["rendered_positions"] == [1, 2]
+    assert not app.exception
+
+
+def test_length_order_keeps_ties_stable_and_counts_raw_unicode_and_whitespace():
+    source = APP.replace("Revenue rose", " A").replace("Operating RISK fell", "éé")
+    source = source.replace("Straße outlook", "Z")
+    app = AppTest.from_string(source).run(timeout=60)
+    app.selectbox(key="retrieved_context_order").select("Longest text first").run()
+    assert app.session_state["rendered_texts"] == [" A", "éé", "Z"]
+    app.selectbox(key="retrieved_context_order").select("Shortest text first").run()
+    assert app.session_state["rendered_texts"] == ["Z", " A", "éé"]
+    assert app.session_state["rendered_positions"] == [2, 0, 1]
+    assert not app.exception
