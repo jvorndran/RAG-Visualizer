@@ -212,6 +212,18 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
         if rank >= first_rank and (last_rank is None or rank <= last_rank)
         and (not search_text or search_text in result.text.casefold())
     ]
+    order = st.selectbox(
+        "Order displayed context",
+        options=["Retrieval rank", "Shortest text first", "Longest text first"],
+        key="retrieved_context_order",
+        help="Order cards and the visible text download by character count. "
+        "Ties keep retrieval order. Original ranks, answers, "
+        "and experiment exports stay unchanged.",
+    )
+    if order != "Retrieval rank":
+        ranked_results.sort(
+            key=lambda item: len(item[1].text), reverse=order == "Longest text first"
+        )
     st.caption(f"Showing {len(ranked_results)} of {len(results)} retrieved chunks.")
     if not ranked_results:
         st.info(
