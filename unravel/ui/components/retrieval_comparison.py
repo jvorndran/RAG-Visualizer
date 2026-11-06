@@ -68,11 +68,15 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
         ).strip().casefold()
         order = st.radio(
             "Order comparison chunks",
-            options=["Current retrieval order", "Baseline rank", "Largest rank movement"],
+            options=[
+                "Current retrieval order", "Baseline rank", "Largest rank movement",
+                "Shortest text first", "Longest text first",
+            ],
             key="retrieval_comparison_order",
             horizontal=True,
-            help="Reorder this view only. Chunks without a baseline rank or rank change sort last; "
-            "ties keep their current retrieval order. Original ranks and downloads stay unchanged.",
+            help="Length uses full chunk text, including whitespace and removed baseline text. "
+            "Chunks without a baseline rank or rank change sort last in those modes. "
+            "Ties keep their current retrieval order.",
         )
         visible = []
         for row in rows:
@@ -102,6 +106,10 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             visible.sort(key=lambda item: (
                 item[0]["Rank change"] is None, -abs(item[0]["Rank change"] or 0)
             ))
+        elif order in ("Shortest text first", "Longest text first"):
+            visible.sort(
+                key=lambda item: len(item[1].text), reverse=order == "Longest text first"
+            )
 
         st.caption(f"Showing {len(visible)} of {len(rows)} comparison chunks.")
         if visible:

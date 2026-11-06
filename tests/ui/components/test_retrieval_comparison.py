@@ -269,6 +269,30 @@ def test_comparison_order_preserves_ranks_ties_and_full_text_inspection():
     assert not app.exception
 
 
+def test_comparison_length_order_uses_full_text_and_preserves_ties_and_ranks():
+    removed = "café " + "x" * 160 + "\nlast line"
+    app = AppTest.from_string(APP, default_timeout=30)
+    app.session_state["results"] = [(1, "café", 0.8), (2, removed, 0.7)]
+    with patch("unravel.ui.components.retrieval_comparison.st.download_button") as download:
+        app.run().button(key="retrieval_comparison_pin").click().run()
+        app.session_state["results"] = [(3, "éabc", 0.9), (1, "café", 0.6), (4, "a ", 0.5)]
+        app.run()
+        app.radio(key="retrieval_comparison_order").set_value("Shortest text first").run()
+        assert list(app.dataframe[0].value["Chunk"]) == [4, 3, 1, 2]
+        app.radio(key="retrieval_comparison_order").set_value("Longest text first").run()
+        frame = app.dataframe[0].value
+        assert list(frame["Chunk"]) == [2, 3, 1, 4]
+        assert list(frame["Current rank"].dropna()) == [1, 2, 3]
+        assert frame.iloc[0]["Baseline rank"] == 2
+        assert app.text[0].value == removed
+        document = download.call_args.kwargs["data"]
+        assert removed in document
+        assert document.index("Chunk index 2") < document.index("Chunk index 3")
+        app.text_input(key="retrieval_comparison_search").input("CAFÉ").run()
+        assert list(app.dataframe[0].value["Chunk"]) == [2, 1]
+        assert not app.exception
+
+
 def test_comparison_order_composes_with_filters_and_resets_after_clear():
     app = AppTest.from_string(APP).run()
     app.button(key="retrieval_comparison_pin").click().run()
