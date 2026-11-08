@@ -39,6 +39,79 @@ def test_pin_compare_clear_and_replace_baseline():
     assert not app.exception
 
 
+def test_minimum_rank_movement_filters_both_directions_and_visible_download():
+    app = AppTest.from_string(APP, default_timeout=30)
+    app.session_state["results"] = [
+        (0, "down", 0.9), (1, "same", 0.8), (2, "small down", 0.7),
+        (3, "UP Café", 0.6), (4, "removed", 0.5),
+    ]
+    with patch("unravel.ui.components.retrieval_comparison.st.download_button") as download:
+        app.run().button(key="retrieval_comparison_pin").click().run()
+        baseline = app.session_state["retrieval_comparison_baseline"]
+        app.session_state["results"] = [
+            (3, "UP Café", 0.2), (1, "same", 0.4), (5, "added", 0.9),
+            (2, "small down", 0.3), (0, "down", 0.8),
+        ]
+        app.run()
+        assert len(app.dataframe[0].value) == 6
+        app.number_input(key="retrieval_comparison_min_movement").set_value(3).run()
+        assert not app.exception
+        frame = app.dataframe[0].value
+        assert list(frame["Chunk"]) == [3, 0]
+        assert list(frame["Rank change"]) == [3, -4]
+        assert list(frame["Baseline rank"]) == [4, 1]
+        assert list(frame["Current rank"]) == [1, 5]
+        assert list(frame["Current score"]) == [0.2, 0.8]
+        assert app.text[0].value == "UP Café"
+        document = download.call_args.kwargs["data"]
+        assert "Chunk index 3" in document and "Chunk index 0" in document
+        assert "small down" not in document and "removed" not in document
+        assert any("4 retained · 1 added · 1 removed" in item.value for item in app.caption)
+        assert app.session_state["retrieval_comparison_baseline"] == baseline
+        app.radio(key="retrieval_comparison_order").set_value("Largest rank movement").run()
+        assert list(app.dataframe[0].value["Chunk"]) == [0, 3]
+        assert download.call_args.kwargs["data"].index("Chunk index 0") < (
+            download.call_args.kwargs["data"].index("Chunk index 3")
+        )
+        app.text_input(key="retrieval_comparison_search").input("CAFÉ").run()
+        assert list(app.dataframe[0].value["Chunk"]) == [3]
+        app.selectbox(key="retrieval_comparison_change").select("Moved down").run()
+        assert not app.dataframe
+        app.text_input(key="retrieval_comparison_search").input("").run()
+        assert list(app.dataframe[0].value["Chunk"]) == [0]
+        app.number_input(key="retrieval_comparison_min_movement").set_value(5).run()
+        assert not app.dataframe
+        assert not app.text
+        download.reset_mock()
+        app.run()
+        download.assert_not_called()
+        app.selectbox(key="retrieval_comparison_change").select("All changes").run()
+        app.number_input(key="retrieval_comparison_min_movement").set_value(0).run()
+        assert len(app.dataframe[0].value) == 6
+        assert app.session_state["retrieval_comparison_baseline"] == baseline
+
+
+def test_minimum_rank_movement_handles_removed_only_runs_and_resets_with_baseline():
+    app = AppTest.from_string(APP, default_timeout=30).run()
+    app.button(key="retrieval_comparison_pin").click().run()
+    app.number_input(key="retrieval_comparison_min_movement").set_value(1).run()
+    assert not app.dataframe  # Identical ranks do not meet a positive threshold.
+    app.session_state["results"] = []
+    app.run()
+    assert not app.exception
+    assert not app.dataframe
+    app.number_input(key="retrieval_comparison_min_movement").set_value(0).run()
+    assert list(app.dataframe[0].value["Change"]) == ["Removed", "Removed"]
+    app.number_input(key="retrieval_comparison_min_movement").set_value(7).run()
+    app.button(key="retrieval_comparison_clear").click().run()
+    assert not app.number_input
+    app.session_state["results"] = [(9, "new", 0.5)]
+    app.run().button(key="retrieval_comparison_pin").click().run()
+    assert app.number_input(key="retrieval_comparison_min_movement").value == 0
+    assert list(app.dataframe[0].value["Chunk"]) == [9]
+    assert not app.exception
+
+
 def test_empty_results_keep_baseline_visible_and_cannot_replace_it():
     app = AppTest.from_string(APP).run()
     app.button(key="retrieval_comparison_pin").click().run()

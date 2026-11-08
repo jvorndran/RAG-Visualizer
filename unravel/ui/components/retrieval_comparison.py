@@ -60,6 +60,13 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             key="retrieval_comparison_change",
             help="Rank filters apply only to chunks present in both runs.",
         )
+        min_movement = st.number_input(
+            "Minimum rank movement", min_value=0, value=0, step=1,
+            key="retrieval_comparison_min_movement",
+            help="Inclusive absolute change in rank positions. Zero includes all changes; "
+            "positive values include only chunks present in both runs. "
+            "Filters this view and its text download; snapshots stay complete.",
+        )
         search = st.text_input(
             "Find in comparison text",
             key="retrieval_comparison_search",
@@ -93,8 +100,13 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
                 movement = "Moved down"
             else:
                 movement = "Same rank"
-            if change in ("All changes", row["Change"], movement) and (
-                not search or search in chunk.text.casefold()
+            if (
+                change in ("All changes", row["Change"], movement)
+                and (not search or search in chunk.text.casefold())
+                and (
+                    min_movement == 0
+                    or (rank_change is not None and abs(rank_change) >= min_movement)
+                )
             ):
                 visible.append((row, chunk))
 
@@ -145,7 +157,10 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             )
             st.text(visible[selected][1].text)
         else:
-            st.info("No comparison chunks match. Clear the search or show all changes.")
+            st.info(
+                "No comparison chunks match. Clear the search, lower the minimum rank "
+                "movement, or show all changes."
+            )
         st.caption(
             "Positive rank changes mean a chunk moved up. Scores retain each run's scale; "
             "different retrievers or rerankers may produce incomparable scores. "
