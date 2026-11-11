@@ -232,7 +232,29 @@ def render_chunk_explorer(
             format_func=lambda index: f"Chunk {index + 1} · {len(chunks[index].text):,} characters",
             key=f"chunk_explorer_selection_{state_key}_{query_key}",
         )
-        chunk = chunks[selected]
-        st.caption(f"Source offsets: {chunk.start_index}–{chunk.end_index}")
-        st.code(chunk.text, language=None)
-        st.json(chunk.metadata, expanded=False)
+        neighbors = st.number_input(
+            "Neighboring chunks on each side", min_value=0, max_value=3, value=0, step=1,
+            key=f"chunk_explorer_neighbors_{state_key}",
+            help=(
+                "Inspect up to three chunks on each side in original document order, "
+                "even when filters hide them. Set zero to show only the selected chunk."
+            ),
+        )
+        if neighbors:
+            st.caption(
+                "Neighbor preview uses original chunk order and includes chunks outside "
+                "the filters. Downloads still include matching chunks only."
+            )
+        for index in range(
+            max(0, selected - neighbors), min(len(chunks), selected + neighbors + 1)
+        ):
+            chunk = chunks[index]
+            if neighbors:
+                relation = "Selected chunk" if index == selected else (
+                    "Before selected chunk" if index < selected else "After selected chunk"
+                )
+                st.caption(f"Chunk {index + 1} · {relation}")
+            st.caption(f"Source offsets: {chunk.start_index}–{chunk.end_index}")
+            st.code(chunk.text, language=None)
+            if index == selected:
+                st.json(chunk.metadata, expanded=False)
