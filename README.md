@@ -169,6 +169,8 @@ Flexible text splitting with transparent, visual chunk inspection:
 
 The chunk explorer's Element types control filters by reported metadata labels, such as table or code. Selecting several labels includes chunks with any selected label, including chunks that report multiple types. Leave it empty to include all chunks and those without element metadata. This filter composes with search, size bounds, repeated text, and sorting. JSON downloads record `element_types`; changing the selection clears a prepared download. Original chunk identities, metadata, and pipeline inputs stay intact.
 
+Use **Neighboring chunks on each side** below the chunk selector to inspect boundaries around the selected chunk. Choose one to three neighbors on each side, or zero to show only the selected chunk. The preview follows original document order, includes neighbors hidden by search or filters, and shows their full text, original numbers and source offsets. It stops at the document edges. Downloads contain the matching selection; changing the neighbor count leaves prepared downloads intact. This local inspection makes no provider calls and resets when the chunk generation changes.
+
 ### Step 3: Embedding Explorer 🧭
 Visualize and analyze your document embeddings:
 - 🤖 **10+ Embedding Models**: Choose from sentence-transformers models (all-MiniLM, all-mpnet, paraphrase variants), multilingual, QA-optimized, and BGE embeddings
