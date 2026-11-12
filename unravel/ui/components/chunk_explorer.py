@@ -29,12 +29,21 @@ def chunk_sections(chunk: Any) -> set[str]:
     return set()
 
 
+def chunk_pages(chunk: Any) -> set[int]:
+    """Read positive source page numbers, including Docling multi-page chunks."""
+    metadata = getattr(chunk, "metadata", {})
+    value = metadata.get("page_no", metadata.get("page_number", metadata.get("page")))
+    values = value if isinstance(value, (list, tuple, set)) else [value]
+    return {page for page in values if type(page) is int and page > 0}
+
+
 def matching_chunk_indices(
     chunks: list[Any], query: str, min_characters: int = 0, max_characters: int | None = None,
     repeated_text_only: bool = False,
     sort_order: str = "Original order",
     element_types: list[str] | None = None,
     sections: list[str] | None = None,
+    pages: list[int] | None = None,
 ) -> list[int]:
     """Return original indices matching text, size, and optional exact-repeat filters."""
     needle = query.strip().casefold()
@@ -47,6 +56,7 @@ def matching_chunk_indices(
         and (text_counts is None or text_counts[chunk.text] > 1)
         and (not element_types or chunk_element_types(chunk).intersection(element_types))
         and (not sections or chunk_sections(chunk).intersection(sections))
+        and (not pages or chunk_pages(chunk).intersection(pages))
     ]
     if sort_order == "Shortest first":
         indices.sort(key=lambda index: len(chunks[index].text))
@@ -62,11 +72,12 @@ def serialize_chunk_selection(
     sort_order: str = "Original order",
     element_types: list[str] | None = None,
     sections: list[str] | None = None,
+    pages: list[int] | None = None,
 ) -> str:
     """Export matching text and offsets; exclude arbitrary metadata and configuration."""
     indices = matching_chunk_indices(
         chunks, query, min_characters, max_characters, repeated_text_only, sort_order,
-        element_types, sections
+        element_types, sections, pages
     )
     payload = {
         "schema_version": 1,
@@ -79,6 +90,7 @@ def serialize_chunk_selection(
         "sort_order": sort_order,
         "element_types": element_types or [],
         "sections": sections or [],
+        "pages": pages or [],
         "total_chunks": len(chunks),
         "count": len(indices),
         "chunks": [
@@ -148,6 +160,15 @@ def render_chunk_explorer(
                 "Markdown headers. Leave empty to include chunks without section metadata."
             ),
         )
+        pages = st.multiselect(
+            "Source pages",
+            options=sorted({page for chunk in chunks for page in chunk_pages(chunk)}),
+            key=f"chunk_explorer_pages_{state_key}",
+            help=(
+                "Match any selected reported source page, including multi-page chunks. "
+                "Leave empty to include chunks without page metadata."
+            ),
+        )
         sort_order = st.radio(
             "Order matching chunks",
             options=["Original order", "Shortest first", "Longest first"],
@@ -166,6 +187,7 @@ def render_chunk_explorer(
             or prepared.get("sort_order", "Original order") != sort_order
             or prepared.get("element_types", []) != element_types
             or prepared.get("sections", []) != sections
+            or prepared.get("pages", []) != pages
         ):
             st.session_state.pop(export_key)
             prepared = None
@@ -174,7 +196,7 @@ def render_chunk_explorer(
             return
         indices = matching_chunk_indices(
             chunks, query, min_characters, max_characters, repeated_text_only, sort_order,
-            element_types, sections
+            element_types, sections, pages
         )
         st.caption(
             f"{len(indices)} of {len(chunks)} chunks match. Original chunk numbers are retained."
@@ -193,9 +215,10 @@ def render_chunk_explorer(
                 "sort_order": sort_order,
                 "element_types": element_types,
                 "sections": sections,
+                "pages": pages,
                 "data": serialize_chunk_selection(
                     chunks, query, document_name, min_characters, max_characters,
-                    repeated_text_only, sort_order, element_types, sections
+                    repeated_text_only, sort_order, element_types, sections, pages
                 ),
                 "text_data": serialize_chunk_text(chunks, indices),
             }
@@ -223,7 +246,7 @@ def render_chunk_explorer(
 
         selection = json.dumps([
             query, min_characters, max_characters, repeated_text_only, sort_order,
-            element_types, sections
+            element_types, sections, pages
         ])
         query_key = hashlib.sha256(selection.encode("utf-8")).hexdigest()[:16]
         selected = st.selectbox(
