@@ -44,6 +44,7 @@ def matching_chunk_indices(
     element_types: list[str] | None = None,
     sections: list[str] | None = None,
     pages: list[int] | None = None,
+    unique_text_only: bool = False,
 ) -> list[int]:
     """Return original indices matching text, size, and optional exact-repeat filters."""
     needle = query.strip().casefold()
@@ -58,6 +59,11 @@ def matching_chunk_indices(
         and (not sections or chunk_sections(chunk).intersection(sections))
         and (not pages or chunk_pages(chunk).intersection(pages))
     ]
+    if unique_text_only:
+        first_by_text: dict[str, int] = {}
+        for index in indices:
+            first_by_text.setdefault(chunks[index].text, index)
+        indices = list(first_by_text.values())
     if sort_order == "Shortest first":
         indices.sort(key=lambda index: len(chunks[index].text))
     elif sort_order == "Longest first":
@@ -73,11 +79,12 @@ def serialize_chunk_selection(
     element_types: list[str] | None = None,
     sections: list[str] | None = None,
     pages: list[int] | None = None,
+    unique_text_only: bool = False,
 ) -> str:
     """Export matching text and offsets; exclude arbitrary metadata and configuration."""
     indices = matching_chunk_indices(
         chunks, query, min_characters, max_characters, repeated_text_only, sort_order,
-        element_types, sections, pages
+        element_types, sections, pages, unique_text_only
     )
     payload = {
         "schema_version": 1,
@@ -91,6 +98,7 @@ def serialize_chunk_selection(
         "element_types": element_types or [],
         "sections": sections or [],
         "pages": pages or [],
+        "unique_text_only": unique_text_only,
         "total_chunks": len(chunks),
         "count": len(indices),
         "chunks": [
@@ -142,6 +150,15 @@ def render_chunk_explorer(
                 "Raw text must match exactly, including case, whitespace, and empty text."
             ),
         )
+        unique_text_only = st.checkbox(
+            "One chunk per exact text",
+            key=f"chunk_explorer_unique_text_{state_key}",
+            help=(
+                "Keep the first matching occurrence in original document order for each "
+                "exact raw text, including case and whitespace. Applies only to inspection "
+                "and downloads; generated chunks remain unchanged."
+            ),
+        )
         element_types = st.multiselect(
             "Element types",
             options=sorted({label for chunk in chunks for label in chunk_element_types(chunk)}),
@@ -188,6 +205,7 @@ def render_chunk_explorer(
             or prepared.get("element_types", []) != element_types
             or prepared.get("sections", []) != sections
             or prepared.get("pages", []) != pages
+            or prepared.get("unique_text_only", False) != unique_text_only
         ):
             st.session_state.pop(export_key)
             prepared = None
@@ -196,7 +214,7 @@ def render_chunk_explorer(
             return
         indices = matching_chunk_indices(
             chunks, query, min_characters, max_characters, repeated_text_only, sort_order,
-            element_types, sections, pages
+            element_types, sections, pages, unique_text_only
         )
         st.caption(
             f"{len(indices)} of {len(chunks)} chunks match. Original chunk numbers are retained."
@@ -216,9 +234,11 @@ def render_chunk_explorer(
                 "element_types": element_types,
                 "sections": sections,
                 "pages": pages,
+                "unique_text_only": unique_text_only,
                 "data": serialize_chunk_selection(
                     chunks, query, document_name, min_characters, max_characters,
-                    repeated_text_only, sort_order, element_types, sections, pages
+                    repeated_text_only, sort_order, element_types, sections, pages,
+                    unique_text_only
                 ),
                 "text_data": serialize_chunk_text(chunks, indices),
             }
@@ -246,7 +266,7 @@ def render_chunk_explorer(
 
         selection = json.dumps([
             query, min_characters, max_characters, repeated_text_only, sort_order,
-            element_types, sections, pages
+            element_types, sections, pages, unique_text_only
         ])
         query_key = hashlib.sha256(selection.encode("utf-8")).hexdigest()[:16]
         selected = st.selectbox(
