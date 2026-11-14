@@ -474,5 +474,72 @@ def test_query_view_offers_experiment_download_alongside_baseline_controls() -> 
     app.button(key="retrieval_comparison_pin").click().run()
     assert not app.exception
     assert [button.label for button in app.get("download_button")] == [
-        "Download visible comparison as text", *expected_downloads
+        "Download visible comparison as JSON", "Download visible comparison as text",
+        *expected_downloads,
     ]
+
+
+def test_visible_comparison_json_preserves_filtered_order_full_text_and_scores():
+    import json
+
+    with patch("streamlit.download_button") as download:
+        app = AppTest.from_string(APP, default_timeout=30).run()
+        app.session_state["results"] = [(0, "  café\nraw  ", 0.8), (1, "removed", 0.0)]
+        app.run().button(key="retrieval_comparison_pin").click().run()
+        baseline = app.session_state["retrieval_comparison_baseline"]
+        app.session_state["results"] = [(2, "added", 0.9), (0, "  café\nraw  ", 0.7)]
+        app.run()
+        app.radio(key="retrieval_comparison_order").set_value("Baseline rank").run()
+
+        def exported():
+            calls = [c.kwargs for c in download.call_args_list
+                     if c.kwargs.get("key") == "retrieval_comparison_json_download"]
+            assert calls[-1]["mime"] == "application/json"
+            return json.loads(calls[-1]["data"])
+
+        document = exported()
+        assert document["schema_version"] == 1
+        assert document["scope"] == "visible_comparison"
+        assert document["count"] == 3
+        assert [c["chunk_index"] for c in document["chunks"]] == [0, 1, 2]
+        assert document["chunks"][0] == {
+            "chunk_index": 0, "change": "Retained", "baseline_rank": 1,
+            "current_rank": 2, "rank_change": -1, "baseline_score": 0.8,
+            "current_score": 0.7, "text": "  café\nraw  ",
+        }
+        assert document["chunks"][1]["current_score"] is None
+        assert document["chunks"][1]["baseline_score"] == 0.0
+        app.text_input(key="retrieval_comparison_search").input("CAFÉ").run()
+        document = exported()
+        assert document["count"] == 1
+        assert document["filters"]["search"] == "café"
+        assert document["filters"]["order"] == "Baseline rank"
+        assert document["baseline_query"] == "original query"
+        assert document["current_query"] == "original query"
+        assert len(app.session_state["retrieval_comparison_baseline"].chunks) == 2
+        assert app.session_state["retrieval_comparison_baseline"] == baseline
+        app.selectbox(key="retrieval_comparison_change").select("Removed").run()
+        download.reset_mock()
+        app.run()
+        download.assert_not_called()
+        assert not app.exception
+
+
+def test_visible_comparison_json_exports_removed_only_and_nonfinite_scores():
+    import json
+
+    with patch("streamlit.download_button") as download:
+        app = AppTest.from_string(APP, default_timeout=30).run()
+        app.session_state["results"] = [(7, "removed\nΩ", float("inf"))]
+        app.run().button(key="retrieval_comparison_pin").click().run()
+        app.session_state["results"] = []
+        app.run()
+        calls = [c.kwargs for c in download.call_args_list
+                 if c.kwargs.get("key") == "retrieval_comparison_json_download"]
+        assert calls
+        document = json.loads(calls[-1]["data"])
+        assert document["count"] == 1
+        assert document["chunks"][0]["text"] == "removed\nΩ"
+        assert document["chunks"][0]["baseline_score"] is None
+        assert document["chunks"][0]["current_rank"] is None
+        assert not app.exception
