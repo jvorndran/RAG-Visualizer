@@ -3,6 +3,7 @@
 import streamlit as st
 
 from unravel.services.retrieval.comparison import RetrievalSnapshot, compare_retrieval
+from unravel.services.retrieval.export import serialize_visible_comparison
 
 BASELINE_KEY = "retrieval_comparison_baseline"
 
@@ -135,6 +136,19 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
                     f"Current rank {row['Current rank'] or '—'}\n\n{chunk.text}"
                     for row, chunk in visible
                 )
+            )
+            st.download_button(
+                label="Download visible comparison as JSON",
+                data=serialize_visible_comparison(
+                    baseline.query, current.query, visible,
+                    {"change": change, "min_rank_movement": min_movement,
+                     "search": search, "order": order},
+                ),
+                file_name="retrieval-comparison.json",
+                mime="application/json",
+                key="retrieval_comparison_json_download",
+                help="Selected rows in this view's order, with full raw text, original ranks "
+                "and scores. Includes removed baseline context and active filters.",
             )
             st.download_button(
                 label="Download visible comparison as text",
