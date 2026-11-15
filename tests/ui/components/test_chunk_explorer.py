@@ -391,3 +391,54 @@ def test_download_preparation_is_explicit_reused_and_invalidated_by_search_or_ge
         app.button[0].click().run()
         assert serialize.call_count == 3
         assert json.loads(download.call_args.kwargs["data"])["count"] == 3
+
+
+def test_excluded_text_is_literal_unicode_and_composes_before_deduplication_and_sort():
+    from unravel.ui.components.chunk_explorer import serialize_chunk_selection
+
+    texts = ["Keep", "Keep Straße", "Keep [raw]", "Keep", "", "STRASSE"]
+    chunks = [SimpleNamespace(text=text, start_index=i, end_index=i + len(text))
+              for i, text in enumerate(texts)]
+    before = deepcopy(chunks)
+    assert matching_chunk_indices(chunks, "", excluded_text=" STRASSE ") == [0, 2, 3, 4]
+    assert matching_chunk_indices(chunks, "keep", excluded_text="[RAW]") == [0, 1, 3]
+    assert matching_chunk_indices(chunks, "", excluded_text="a.*") == list(range(6))
+    assert matching_chunk_indices(chunks, "", excluded_text="  ") == list(range(6))
+    assert matching_chunk_indices(chunks, "keep", repeated_text_only=True,
+                                  unique_text_only=True, excluded_text="STRASSE") == [0]
+    output = json.loads(serialize_chunk_selection(
+        chunks, "keep", "doc.txt", sort_order="Longest first", excluded_text=" STRASSE "
+    ))
+    assert output["excluded_text"] == "STRASSE"
+    assert [row["chunk_number"] for row in output["chunks"]] == [3, 1, 4]
+    assert output["chunks"][0]["text"] == "Keep [raw]"
+    assert output["chunks"][0]["start_index"] == 2
+    assert chunks == before
+
+
+def test_exclusion_control_invalidates_both_exports_and_resets_with_generation():
+    from unittest.mock import patch
+
+    with patch("unravel.ui.components.chunk_explorer.st.download_button") as download:
+        app = AppTest.from_string(SCRIPT).run(timeout=30)
+        app.button[0].click().run()
+        calls = download.call_count
+        app.text_input[1].set_value("strasse").run()
+        assert not app.exception
+        assert download.call_count == calls
+        assert len(app.selectbox[0].options) == 2
+        app.button[0].click().run()
+        assert "Straße" not in download.call_args_list[-2].kwargs["data"]
+        output = json.loads(download.call_args.kwargs["data"])
+        assert output["excluded_text"] == "strasse" and output["count"] == 2
+        app.text_input[1].set_value("First").run()
+        assert "chunk_explorer_prepared_export" not in app.session_state
+        assert app.selectbox[0].value == 1
+        app.text_input[1].set_value("x").run()
+        app.text_input[0].set_value("strasse").run()
+        assert not app.selectbox and app.button[0].disabled
+        app.session_state["generation"] = "next"
+        app.run()
+        assert not app.exception
+        assert app.text_input[1].value == ""
+        assert len(app.selectbox[0].options) == 3

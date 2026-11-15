@@ -45,15 +45,18 @@ def matching_chunk_indices(
     sections: list[str] | None = None,
     pages: list[int] | None = None,
     unique_text_only: bool = False,
+    excluded_text: str = "",
 ) -> list[int]:
     """Return original indices matching text, size, and optional exact-repeat filters."""
     needle = query.strip().casefold()
+    excluded_needle = excluded_text.strip().casefold()
     text_counts = Counter(chunk.text for chunk in chunks) if repeated_text_only else None
     indices = [
         index for index, chunk in enumerate(chunks)
         if len(chunk.text) >= min_characters
         and (max_characters is None or len(chunk.text) <= max_characters)
         and needle in chunk.text.casefold()
+        and (not excluded_needle or excluded_needle not in chunk.text.casefold())
         and (text_counts is None or text_counts[chunk.text] > 1)
         and (not element_types or chunk_element_types(chunk).intersection(element_types))
         and (not sections or chunk_sections(chunk).intersection(sections))
@@ -80,16 +83,18 @@ def serialize_chunk_selection(
     sections: list[str] | None = None,
     pages: list[int] | None = None,
     unique_text_only: bool = False,
+    excluded_text: str = "",
 ) -> str:
     """Export matching text and offsets; exclude arbitrary metadata and configuration."""
     indices = matching_chunk_indices(
         chunks, query, min_characters, max_characters, repeated_text_only, sort_order,
-        element_types, sections, pages, unique_text_only
+        element_types, sections, pages, unique_text_only, excluded_text
     )
     payload = {
         "schema_version": 1,
         "document": document_name,
         "search_text": query.strip(),
+        "excluded_text": excluded_text.strip(),
         "case_sensitive": False,
         "min_characters": min_characters,
         "max_characters": max_characters,
@@ -128,6 +133,14 @@ def render_chunk_explorer(
             "Search chunk text",
             key=f"chunk_explorer_search_{state_key}",
             help="Case-insensitive literal substring search across the generated raw chunk text.",
+        )
+        excluded_text = st.text_input(
+            "Exclude chunk text",
+            key=f"chunk_explorer_exclude_{state_key}",
+            help=(
+                "Hide chunks containing this case-insensitive literal substring. "
+                "Surrounding search whitespace is ignored; leave empty to exclude nothing."
+            ),
         )
         minimum_column, maximum_column = st.columns(2)
         with minimum_column:
@@ -206,6 +219,7 @@ def render_chunk_explorer(
             or prepared.get("sections", []) != sections
             or prepared.get("pages", []) != pages
             or prepared.get("unique_text_only", False) != unique_text_only
+            or prepared.get("excluded_text", "") != excluded_text
         ):
             st.session_state.pop(export_key)
             prepared = None
@@ -214,7 +228,7 @@ def render_chunk_explorer(
             return
         indices = matching_chunk_indices(
             chunks, query, min_characters, max_characters, repeated_text_only, sort_order,
-            element_types, sections, pages, unique_text_only
+            element_types, sections, pages, unique_text_only, excluded_text
         )
         st.caption(
             f"{len(indices)} of {len(chunks)} chunks match. Original chunk numbers are retained."
@@ -235,10 +249,11 @@ def render_chunk_explorer(
                 "sections": sections,
                 "pages": pages,
                 "unique_text_only": unique_text_only,
+                "excluded_text": excluded_text,
                 "data": serialize_chunk_selection(
                     chunks, query, document_name, min_characters, max_characters,
                     repeated_text_only, sort_order, element_types, sections, pages,
-                    unique_text_only
+                    unique_text_only, excluded_text
                 ),
                 "text_data": serialize_chunk_text(chunks, indices),
             }
@@ -266,7 +281,7 @@ def render_chunk_explorer(
 
         selection = json.dumps([
             query, min_characters, max_characters, repeated_text_only, sort_order,
-            element_types, sections, pages, unique_text_only
+            element_types, sections, pages, unique_text_only, excluded_text
         ])
         query_key = hashlib.sha256(selection.encode("utf-8")).hexdigest()[:16]
         selected = st.selectbox(
