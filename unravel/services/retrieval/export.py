@@ -50,6 +50,30 @@ def serialize_visible_comparison(
     return json.dumps(_json_safe(payload), ensure_ascii=False, indent=2, allow_nan=False) + "\n"
 
 
+def serialize_visible_context(
+    query: str, ranked_results: list[tuple[int, Any]], filters: dict[str, Any]
+) -> str:
+    """Export the displayed cards without deduplication or arbitrary result metadata."""
+    payload = {
+        "schema_version": 1,
+        "scope": "visible_context",
+        "query": query,
+        "filters": filters,
+        "count": len(ranked_results),
+        "chunks": [
+            {
+                "chunk_index": result.index,
+                "rank": rank,
+                "score": result.score,
+                "original_score": result.metadata.get("original_score", result.score),
+                "text": result.text,
+            }
+            for rank, result in ranked_results
+        ],
+    }
+    return json.dumps(_json_safe(payload), ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+
+
 def _json_safe(value: object) -> object:
     """Represent unavailable non-finite measurements as JSON null."""
     if isinstance(value, float) and not math.isfinite(value):

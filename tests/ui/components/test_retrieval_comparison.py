@@ -469,7 +469,10 @@ def test_query_view_supports_results_created_before_snapshot_tracking():
 def test_query_view_offers_experiment_download_alongside_baseline_controls() -> None:
     app = AppTest.from_string(QUERY_APP).run(timeout=45)
     assert not app.exception
-    expected_downloads = ["Download retrieval experiment", "Download visible context as text"]
+    expected_downloads = [
+        "Download retrieval experiment", "Download visible context as text",
+        "Download visible context as JSON",
+    ]
     assert [button.label for button in app.get("download_button")] == expected_downloads
     app.button(key="retrieval_comparison_pin").click().run()
     assert not app.exception
