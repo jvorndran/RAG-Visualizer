@@ -29,6 +29,7 @@ from unravel.ui.components.chunk_viewer import (
 )
 from unravel.ui.components.retrieval_comparison import render_retrieval_comparison
 from unravel.ui.components.retrieval_export import (
+    render_context_json_export,
     render_context_text_export,
     render_retrieval_export,
 )
@@ -216,7 +217,7 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
         "Order displayed context",
         options=["Retrieval rank", "Shortest text first", "Longest text first"],
         key="retrieved_context_order",
-        help="Order cards and the visible text download by character count. "
+        help="Order cards and visible context downloads by character count. "
         "Ties keep retrieval order. Original ranks, answers, "
         "and experiment exports stay unchanged.",
     )
@@ -232,6 +233,11 @@ def _render_retrieved_chunks(results: list[Any], show_scores: bool = True) -> No
         return
 
     render_context_text_export(ranked_results)
+    render_context_json_export(
+        current_snapshot.query,
+        ranked_results,
+        {"search": search_text, "first_rank": first_rank, "last_rank": last_rank, "order": order},
+    )
 
     # Convert search results to chunks for the viewer
     from dataclasses import dataclass
