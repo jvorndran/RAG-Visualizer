@@ -61,6 +61,13 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             key="retrieval_comparison_change",
             help="Rank filters apply only to chunks present in both runs.",
         )
+        top_ranks = st.number_input(
+            "Top ranks in either run", min_value=0, value=0, step=1,
+            key="retrieval_comparison_top_ranks",
+            help="Keep chunks ranked at or above this position in either run. "
+            "Zero includes every rank. Applies to the table, inspector and visible downloads; "
+            "full snapshots and overall change counts stay complete.",
+        )
         min_movement = st.number_input(
             "Minimum rank movement", min_value=0, value=0, step=1,
             key="retrieval_comparison_min_movement",
@@ -105,6 +112,13 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
                 change in ("All changes", row["Change"], movement)
                 and (not search or search in chunk.text.casefold())
                 and (
+                    top_ranks == 0
+                    or any(
+                        rank is not None and rank <= top_ranks
+                        for rank in (row["Baseline rank"], row["Current rank"])
+                    )
+                )
+                and (
                     min_movement == 0
                     or (rank_change is not None and abs(rank_change) >= min_movement)
                 )
@@ -141,7 +155,7 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
                 label="Download visible comparison as JSON",
                 data=serialize_visible_comparison(
                     baseline.query, current.query, visible,
-                    {"change": change, "min_rank_movement": min_movement,
+                    {"change": change, "top_ranks": top_ranks, "min_rank_movement": min_movement,
                      "search": search, "order": order},
                 ),
                 file_name="retrieval-comparison.json",
@@ -173,7 +187,8 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
         else:
             st.info(
                 "No comparison chunks match. Clear the search, lower the minimum rank "
-                "movement, or show all changes."
+                "movement, increase the top-rank window (zero shows all ranks), "
+                "or show all changes."
             )
         st.caption(
             "Positive rank changes mean a chunk moved up. Scores retain each run's scale; "

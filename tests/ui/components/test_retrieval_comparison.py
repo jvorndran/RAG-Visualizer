@@ -546,3 +546,65 @@ def test_visible_comparison_json_exports_removed_only_and_nonfinite_scores():
         assert document["chunks"][0]["baseline_score"] is None
         assert document["chunks"][0]["current_rank"] is None
         assert not app.exception
+
+
+def test_top_rank_window_keeps_union_of_both_runs_and_visible_exports():
+    import json
+
+    app = AppTest.from_string(APP, default_timeout=30)
+    app.session_state["results"] = [
+        (0, "lost priority", 0.9), (1, "down", 0.8), (2, "tail", 0.7),
+    ]
+    with patch("unravel.ui.components.retrieval_comparison.st.download_button") as download:
+        app.run().button(key="retrieval_comparison_pin").click().run()
+        baseline = app.session_state["retrieval_comparison_baseline"]
+        app.session_state["results"] = [
+            (3, "new priority", 0.3), (2, "tail", 0.2), (1, "down", 0.1),
+        ]
+        app.run().number_input(key="retrieval_comparison_top_ranks").set_value(1).run()
+        assert not app.exception
+        frame = app.dataframe[0].value
+        assert list(frame["Chunk"]) == [3, 0]
+        assert list(frame["Change"]) == ["Added", "Removed"]
+        assert list(frame["Current score"].dropna()) == [0.3]
+        exports = {call.kwargs["key"]: call.kwargs["data"] for call in download.call_args_list}
+        payload = json.loads(exports["retrieval_comparison_json_download"])
+        assert payload["filters"]["top_ranks"] == 1
+        assert [row["chunk_index"] for row in payload["chunks"]] == [3, 0]
+        assert "lost priority" in exports["retrieval_comparison_text_download"]
+        assert any("2 retained · 1 added · 1 removed" in item.value for item in app.caption)
+        app.radio(key="retrieval_comparison_order").set_value("Baseline rank").run()
+        assert list(app.dataframe[0].value["Chunk"]) == [0, 3]
+        app.selectbox(key="retrieval_comparison_change").select("Removed").run()
+        assert list(app.dataframe[0].value["Chunk"]) == [0]
+        app.text_input(key="retrieval_comparison_search").input("NEW").run()
+        assert not app.dataframe
+        download.reset_mock()
+        app.run()
+        download.assert_not_called()
+        app.text_input(key="retrieval_comparison_search").input("").run()
+        app.selectbox(key="retrieval_comparison_change").select("All changes").run()
+        app.number_input(key="retrieval_comparison_top_ranks").set_value(2).run()
+        assert list(app.dataframe[0].value["Chunk"]) == [0, 1, 2, 3]
+        app.number_input(key="retrieval_comparison_min_movement").set_value(1).run()
+        assert list(app.dataframe[0].value["Chunk"]) == [1, 2]
+        assert app.session_state["retrieval_comparison_baseline"] == baseline
+
+
+def test_top_rank_window_handles_empty_current_and_clears_with_baseline():
+    app = AppTest.from_string(APP, default_timeout=30).run()
+    app.button(key="retrieval_comparison_pin").click().run()
+    app.number_input(key="retrieval_comparison_top_ranks").set_value(1).run()
+    app.session_state["results"] = []
+    app.run()
+    assert list(app.dataframe[0].value["Chunk"]) == [0]
+    assert app.text[0].value == "first"
+    app.number_input(key="retrieval_comparison_top_ranks").set_value(0).run()
+    assert list(app.dataframe[0].value["Chunk"]) == [0, 1]
+    app.number_input(key="retrieval_comparison_top_ranks").set_value(9).run()
+    app.button(key="retrieval_comparison_clear").click().run()
+    assert not app.number_input
+    app.session_state["results"] = [(9, "new", 0.5)]
+    app.run().button(key="retrieval_comparison_pin").click().run()
+    assert app.number_input(key="retrieval_comparison_top_ranks").value == 0
+    assert not app.exception
