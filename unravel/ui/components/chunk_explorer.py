@@ -46,6 +46,8 @@ def matching_chunk_indices(
     pages: list[int] | None = None,
     unique_text_only: bool = False,
     excluded_text: str = "",
+    min_chunk_number: int = 1,
+    max_chunk_number: int | None = None,
 ) -> list[int]:
     """Return original indices matching text, size, and optional exact-repeat filters."""
     needle = query.strip().casefold()
@@ -54,6 +56,8 @@ def matching_chunk_indices(
     indices = [
         index for index, chunk in enumerate(chunks)
         if len(chunk.text) >= min_characters
+        and index + 1 >= min_chunk_number
+        and (max_chunk_number is None or index + 1 <= max_chunk_number)
         and (max_characters is None or len(chunk.text) <= max_characters)
         and needle in chunk.text.casefold()
         and (not excluded_needle or excluded_needle not in chunk.text.casefold())
@@ -84,17 +88,22 @@ def serialize_chunk_selection(
     pages: list[int] | None = None,
     unique_text_only: bool = False,
     excluded_text: str = "",
+    min_chunk_number: int = 1,
+    max_chunk_number: int | None = None,
 ) -> str:
     """Export matching text and offsets; exclude arbitrary metadata and configuration."""
     indices = matching_chunk_indices(
         chunks, query, min_characters, max_characters, repeated_text_only, sort_order,
-        element_types, sections, pages, unique_text_only, excluded_text
+        element_types, sections, pages, unique_text_only, excluded_text,
+        min_chunk_number, max_chunk_number
     )
     payload = {
         "schema_version": 1,
         "document": document_name,
         "search_text": query.strip(),
         "excluded_text": excluded_text.strip(),
+        "min_chunk_number": min_chunk_number,
+        "max_chunk_number": max_chunk_number,
         "case_sensitive": False,
         "min_characters": min_characters,
         "max_characters": max_characters,
@@ -154,6 +163,20 @@ def render_chunk_explorer(
                 "Maximum characters", min_value=0, value=None, step=1,
                 placeholder="No limit", key=f"chunk_explorer_max_characters_{state_key}",
                 help="Inclusive raw-text character count. Leave empty for no upper bound.",
+            )
+        first_column, last_column = st.columns(2)
+        with first_column:
+            min_chunk_number = st.number_input(
+                "First chunk number", min_value=1, max_value=max(1, len(chunks)),
+                value=1, step=1, key=f"chunk_explorer_first_number_{state_key}",
+                help="Inclusive original chunk number, before filtering and sorting.",
+            )
+        with last_column:
+            max_chunk_number = st.number_input(
+                "Last chunk number", min_value=1, max_value=max(1, len(chunks)),
+                value=None, step=1, placeholder="Through last chunk",
+                key=f"chunk_explorer_last_number_{state_key}",
+                help="Inclusive original chunk number. Leave empty for the document end.",
             )
         repeated_text_only = st.checkbox(
             "Repeated text only",
@@ -220,15 +243,21 @@ def render_chunk_explorer(
             or prepared.get("pages", []) != pages
             or prepared.get("unique_text_only", False) != unique_text_only
             or prepared.get("excluded_text", "") != excluded_text
+            or prepared.get("min_chunk_number", 1) != min_chunk_number
+            or prepared.get("max_chunk_number") != max_chunk_number
         ):
             st.session_state.pop(export_key)
             prepared = None
         if max_characters is not None and min_characters > max_characters:
             st.error("Minimum characters must not exceed maximum characters.")
             return
+        if max_chunk_number is not None and min_chunk_number > max_chunk_number:
+            st.error("First chunk number must not exceed last chunk number.")
+            return
         indices = matching_chunk_indices(
             chunks, query, min_characters, max_characters, repeated_text_only, sort_order,
-            element_types, sections, pages, unique_text_only, excluded_text
+            element_types, sections, pages, unique_text_only, excluded_text,
+            min_chunk_number, max_chunk_number
         )
         st.caption(
             f"{len(indices)} of {len(chunks)} chunks match. Original chunk numbers are retained."
@@ -250,10 +279,12 @@ def render_chunk_explorer(
                 "pages": pages,
                 "unique_text_only": unique_text_only,
                 "excluded_text": excluded_text,
+                "min_chunk_number": min_chunk_number,
+                "max_chunk_number": max_chunk_number,
                 "data": serialize_chunk_selection(
                     chunks, query, document_name, min_characters, max_characters,
                     repeated_text_only, sort_order, element_types, sections, pages,
-                    unique_text_only, excluded_text
+                    unique_text_only, excluded_text, min_chunk_number, max_chunk_number
                 ),
                 "text_data": serialize_chunk_text(chunks, indices),
             }
@@ -281,7 +312,8 @@ def render_chunk_explorer(
 
         selection = json.dumps([
             query, min_characters, max_characters, repeated_text_only, sort_order,
-            element_types, sections, pages, unique_text_only, excluded_text
+            element_types, sections, pages, unique_text_only, excluded_text,
+            min_chunk_number, max_chunk_number
         ])
         query_key = hashlib.sha256(selection.encode("utf-8")).hexdigest()[:16]
         selected = st.selectbox(
