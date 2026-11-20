@@ -2,7 +2,11 @@
 
 import streamlit as st
 
-from unravel.services.retrieval.comparison import RetrievalSnapshot, compare_retrieval
+from unravel.services.retrieval.comparison import (
+    RetrievalSnapshot,
+    compare_retrieval,
+    rank_overlap_profile,
+)
 from unravel.services.retrieval.export import serialize_visible_comparison
 
 BASELINE_KEY = "retrieval_comparison_baseline"
@@ -52,6 +56,21 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
         added = sum(row["Change"] == "Added" for row in rows)
         removed = sum(row["Change"] == "Removed" for row in rows)
         st.caption(f"{retained} retained · {added} added · {removed} removed")
+        if st.checkbox(
+            "Show rank overlap profile",
+            key="retrieval_comparison_overlap",
+            help="Compare the first N chunks from each complete run at every depth. "
+            "Independent of the comparison filters below.",
+        ):
+            st.caption(
+                "Overlap is shared chunks divided by the union at each depth (Jaccard). "
+                "A shorter run contributes all its available chunks. Identity uses index "
+                "and full text; scores do not affect overlap."
+            )
+            st.dataframe(
+                rank_overlap_profile(baseline, current),
+                hide_index=True, use_container_width=True,
+            )
         change = st.selectbox(
             "Show changes",
             options=[

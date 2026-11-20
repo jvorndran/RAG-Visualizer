@@ -85,6 +85,33 @@ def snapshot_retrieval(
     )
 
 
+def rank_overlap_profile(
+    baseline: RetrievalSnapshot, current: RetrievalSnapshot
+) -> list[dict[str, Any]]:
+    """Compare each run's rank prefix using shared identities divided by their union."""
+    previous = set()
+    latest = set()
+    profile = []
+    for position in range(max(len(baseline.chunks), len(current.chunks))):
+        if position < len(baseline.chunks):
+            chunk = baseline.chunks[position]
+            previous.add((chunk.index, chunk.text))
+        if position < len(current.chunks):
+            chunk = current.chunks[position]
+            latest.add((chunk.index, chunk.text))
+        shared = len(previous & latest)
+        union = len(previous | latest)
+        profile.append({
+            "Depth": position + 1,
+            "Baseline chunks": len(previous),
+            "Current chunks": len(latest),
+            "Shared chunks": shared,
+            "Union chunks": union,
+            "Overlap (%)": round(100 * shared / union, 1),
+        })
+    return profile
+
+
 def compare_retrieval(
     baseline: RetrievalSnapshot, current: RetrievalSnapshot
 ) -> list[dict[str, Any]]:
