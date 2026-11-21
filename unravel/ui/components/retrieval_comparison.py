@@ -5,9 +5,13 @@ import streamlit as st
 from unravel.services.retrieval.comparison import (
     RetrievalSnapshot,
     compare_retrieval,
+    context_size_profile,
     rank_overlap_profile,
 )
-from unravel.services.retrieval.export import serialize_visible_comparison
+from unravel.services.retrieval.export import (
+    serialize_context_size_profile,
+    serialize_visible_comparison,
+)
 
 BASELINE_KEY = "retrieval_comparison_baseline"
 
@@ -56,6 +60,31 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
         added = sum(row["Change"] == "Added" for row in rows)
         removed = sum(row["Change"] == "Removed" for row in rows)
         st.caption(f"{retained} retained · {added} added · {removed} removed")
+        if st.checkbox(
+            "Show context size profile",
+            key="retrieval_comparison_context_size",
+            help="Compare cumulative raw chunk text at each rank depth in both complete runs.",
+        ):
+            st.caption(
+                "Sizes count raw Unicode characters and UTF-8 bytes, including whitespace. "
+                "Repeated text in different chunks counts each time. A shorter run contributes "
+                "its available context. Character change is current minus baseline. "
+                "These are text sizes, not token counts or complete prompt sizes; separators "
+                "and prompt instructions are excluded. "
+                "Comparison filters do not affect this profile."
+            )
+            st.dataframe(
+                context_size_profile(baseline, current),
+                hide_index=True, use_container_width=True,
+            )
+            st.download_button(
+                label="Download context size profile as JSON",
+                data=serialize_context_size_profile(baseline, current),
+                file_name="retrieval-context-size.json",
+                mime="application/json",
+                key="retrieval_comparison_context_size_download",
+                help="Full-run size measurements with both query labels and retrieval strategies.",
+            )
         if st.checkbox(
             "Show rank overlap profile",
             key="retrieval_comparison_overlap",

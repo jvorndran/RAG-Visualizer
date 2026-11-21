@@ -1,0 +1,70 @@
+"""Context size comparison reads complete snapshots without provider requests."""
+
+import json
+from unittest.mock import patch
+
+from streamlit.testing.v1 import AppTest
+
+APP = """
+from types import SimpleNamespace
+import streamlit as st
+from unravel.ui.components.retrieval_comparison import render_retrieval_comparison
+from unravel.services.retrieval.comparison import snapshot_retrieval
+texts = st.session_state.get("texts", ["é\\n", "🙂"])
+current = snapshot_retrieval("query", [
+    SimpleNamespace(index=i, text=text, score=0.5) for i, text in enumerate(texts)
+], {})
+render_retrieval_comparison(current)
+"""
+
+
+def test_profile_uses_complete_snapshots_and_tracks_empty_current_repin_clear():
+    app = AppTest.from_string(APP, default_timeout=30).run()
+    app.button(key="retrieval_comparison_pin").click().run()
+    assert not app.checkbox(key="retrieval_comparison_context_size").value
+    app.session_state["texts"] = ["abcdef"]
+    app.run()
+    app.checkbox(key="retrieval_comparison_context_size").check().run()
+    assert list(app.dataframe[0].value["Baseline characters"]) == [2, 3]
+    assert list(app.dataframe[0].value["Current characters"]) == [6, 6]
+    assert list(app.dataframe[0].value["Character change"]) == [4, 3]
+    app.text_input(key="retrieval_comparison_search").input("absent").run()
+    assert len(app.dataframe) == 1
+    assert list(app.dataframe[0].value["Baseline UTF-8 bytes"]) == [3, 7]
+    app.session_state["texts"] = []
+    app.run()
+    assert list(app.dataframe[0].value["Current characters"]) == [0, 0]
+    app.session_state["texts"] = ["x"]
+    app.run()
+    app.button(key="retrieval_comparison_pin").click().run()
+    assert list(app.dataframe[0].value["Character change"]) == [0]
+    app.button(key="retrieval_comparison_clear").click().run()
+    assert len(app.checkbox) == 0
+    app.button(key="retrieval_comparison_pin").click().run()
+    assert not app.checkbox(key="retrieval_comparison_context_size").value
+    assert not app.exception
+
+
+def test_profile_download_contains_complete_runs_despite_hidden_comparison_rows():
+    with patch("streamlit.download_button") as download:
+        app = AppTest.from_string(APP, default_timeout=30).run()
+        app.button(key="retrieval_comparison_pin").click().run()
+        app.session_state["texts"] = []
+        app.run()
+        app.checkbox(key="retrieval_comparison_context_size").check().run()
+        download.reset_mock()
+        app.text_input(key="retrieval_comparison_search").input("no matches").run()
+        calls = [call.kwargs for call in download.call_args_list
+                 if call.kwargs.get("key") == "retrieval_comparison_context_size_download"]
+        assert len(calls) == 1
+        assert calls[0]["mime"] == "application/json"
+        assert calls[0]["file_name"] == "retrieval-context-size.json"
+        payload = json.loads(calls[0]["data"])
+        assert payload["count"] == 2
+        assert [row["baseline_utf8_bytes"] for row in payload["profile"]] == [3, 7]
+        assert [row["current_characters"] for row in payload["profile"]] == [0, 0]
+        download.reset_mock()
+        app.checkbox(key="retrieval_comparison_context_size").uncheck().run()
+        assert not any(call.kwargs.get("key") == "retrieval_comparison_context_size_download"
+                       for call in download.call_args_list)
+        assert not app.exception
