@@ -5,7 +5,37 @@ import math
 from dataclasses import asdict
 from typing import Any
 
-from unravel.services.retrieval.comparison import RankedChunk, RetrievalSnapshot, compare_retrieval
+from unravel.services.retrieval.comparison import (
+    RankedChunk,
+    RetrievalSnapshot,
+    compare_retrieval,
+    context_size_profile,
+)
+
+
+def serialize_context_size_profile(baseline: RetrievalSnapshot, current: RetrievalSnapshot) -> str:
+    """Export full-run text sizes, query labels and strategies without raw context."""
+    profile = [
+        {
+            "depth": row["Depth"],
+            "baseline_characters": row["Baseline characters"],
+            "current_characters": row["Current characters"],
+            "character_change": row["Character change"],
+            "baseline_utf8_bytes": row["Baseline UTF-8 bytes"],
+            "current_utf8_bytes": row["Current UTF-8 bytes"],
+        }
+        for row in context_size_profile(baseline, current)
+    ]
+    payload = {
+        "schema_version": 1,
+        "scope": "full_context_size_profile",
+        "measurement": "raw_chunk_text",
+        "baseline": {"query": baseline.query, "strategy": baseline.strategy},
+        "current": {"query": current.query, "strategy": current.strategy},
+        "count": len(profile),
+        "profile": profile,
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
 
 
 def serialize_retrieval_experiment(

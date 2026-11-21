@@ -8,7 +8,10 @@ from unravel.services.retrieval.comparison import (
     context_size_profile,
     rank_overlap_profile,
 )
-from unravel.services.retrieval.export import serialize_visible_comparison
+from unravel.services.retrieval.export import (
+    serialize_context_size_profile,
+    serialize_visible_comparison,
+)
 
 BASELINE_KEY = "retrieval_comparison_baseline"
 
@@ -73,6 +76,14 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             st.dataframe(
                 context_size_profile(baseline, current),
                 hide_index=True, use_container_width=True,
+            )
+            st.download_button(
+                label="Download context size profile as JSON",
+                data=serialize_context_size_profile(baseline, current),
+                file_name="retrieval-context-size.json",
+                mime="application/json",
+                key="retrieval_comparison_context_size_download",
+                help="Full-run size measurements with both query labels and retrieval strategies.",
             )
         if st.checkbox(
             "Show rank overlap profile",
