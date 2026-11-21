@@ -85,6 +85,32 @@ def snapshot_retrieval(
     )
 
 
+def context_size_profile(
+    baseline: RetrievalSnapshot, current: RetrievalSnapshot
+) -> list[dict[str, int]]:
+    """Measure cumulative raw text at each depth, clipping to available context."""
+    baseline_chars = current_chars = baseline_bytes = current_bytes = 0
+    profile = []
+    for position in range(max(len(baseline.chunks), len(current.chunks))):
+        if position < len(baseline.chunks):
+            text = baseline.chunks[position].text
+            baseline_chars += len(text)
+            baseline_bytes += len(text.encode("utf-8"))
+        if position < len(current.chunks):
+            text = current.chunks[position].text
+            current_chars += len(text)
+            current_bytes += len(text.encode("utf-8"))
+        profile.append({
+            "Depth": position + 1,
+            "Baseline characters": baseline_chars,
+            "Current characters": current_chars,
+            "Character change": current_chars - baseline_chars,
+            "Baseline UTF-8 bytes": baseline_bytes,
+            "Current UTF-8 bytes": current_bytes,
+        })
+    return profile
+
+
 def rank_overlap_profile(
     baseline: RetrievalSnapshot, current: RetrievalSnapshot
 ) -> list[dict[str, Any]]:
