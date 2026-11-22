@@ -10,6 +10,7 @@ from unravel.services.retrieval.comparison import (
 )
 from unravel.services.retrieval.export import (
     serialize_context_size_profile,
+    serialize_rank_overlap_profile,
     serialize_visible_comparison,
 )
 
@@ -99,6 +100,15 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             st.dataframe(
                 rank_overlap_profile(baseline, current),
                 hide_index=True, use_container_width=True,
+            )
+            st.download_button(
+                label="Download rank overlap profile as JSON",
+                data=serialize_rank_overlap_profile(baseline, current),
+                file_name="retrieval-rank-overlap.json",
+                mime="application/json",
+                key="retrieval_comparison_overlap_download",
+                help="Complete rank-prefix overlap with query labels and retrieval strategies. "
+                "Independent of comparison filters; excludes chunk text and scores.",
             )
         change = st.selectbox(
             "Show changes",
