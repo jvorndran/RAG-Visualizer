@@ -123,6 +123,25 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             "positive values include only chunks present in both runs. "
             "Filters this view and its text download; snapshots stay complete.",
         )
+        length_columns = st.columns(2)
+        with length_columns[0]:
+            min_chars = st.number_input(
+                "Minimum characters", min_value=0, value=0, step=1,
+                key="retrieval_comparison_min_chars",
+                help="Inclusive raw Unicode character count, including whitespace. "
+                "Applies to visible rows, inspection and comparison downloads.",
+            )
+        with length_columns[1]:
+            max_chars = st.number_input(
+                "Maximum characters", min_value=0, value=0, step=1,
+                key="retrieval_comparison_max_chars",
+                help="Inclusive raw Unicode character count. Zero has no upper bound. "
+                "Removed chunks use their full baseline text; snapshots stay complete.",
+            )
+        if max_chars and min_chars > max_chars:
+            st.warning(
+                "Maximum characters must be at least Minimum characters, or zero for no limit."
+            )
         search = st.text_input(
             "Find in comparison text",
             key="retrieval_comparison_search",
@@ -159,6 +178,8 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             if (
                 change in ("All changes", row["Change"], movement)
                 and (not search or search in chunk.text.casefold())
+                and len(chunk.text) >= min_chars
+                and (max_chars == 0 or len(chunk.text) <= max_chars)
                 and (
                     top_ranks == 0
                     or any(
@@ -204,7 +225,8 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
                 data=serialize_visible_comparison(
                     baseline.query, current.query, visible,
                     {"change": change, "top_ranks": top_ranks, "min_rank_movement": min_movement,
-                     "search": search, "order": order},
+                     "search": search, "order": order,
+                     "min_characters": min_chars, "max_characters": max_chars},
                 ),
                 file_name="retrieval-comparison.json",
                 mime="application/json",
@@ -234,8 +256,9 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             st.text(visible[selected][1].text)
         else:
             st.info(
-                "No comparison chunks match. Clear the search, lower the minimum rank "
-                "movement, increase the top-rank window (zero shows all ranks), "
+                "No comparison chunks match. Clear the search, widen the character bounds, "
+                "lower the minimum rank movement, increase the top-rank window "
+                "(zero shows all ranks), "
                 "or show all changes."
             )
         st.caption(
