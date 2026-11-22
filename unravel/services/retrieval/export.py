@@ -10,7 +10,34 @@ from unravel.services.retrieval.comparison import (
     RetrievalSnapshot,
     compare_retrieval,
     context_size_profile,
+    rank_overlap_profile,
 )
+
+
+def serialize_rank_overlap_profile(baseline: RetrievalSnapshot, current: RetrievalSnapshot) -> str:
+    """Export complete rank-prefix overlap measurements without chunk text or scores."""
+    profile = [
+        {
+            "depth": row["Depth"],
+            "baseline_chunks": row["Baseline chunks"],
+            "current_chunks": row["Current chunks"],
+            "shared_chunks": row["Shared chunks"],
+            "union_chunks": row["Union chunks"],
+            "overlap_percent": row["Overlap (%)"],
+        }
+        for row in rank_overlap_profile(baseline, current)
+    ]
+    payload = {
+        "schema_version": 1,
+        "scope": "full_rank_overlap_profile",
+        "identity": "chunk_index_and_text",
+        "metric": "jaccard",
+        "baseline": {"query": baseline.query, "strategy": baseline.strategy},
+        "current": {"query": current.query, "strategy": current.strategy},
+        "count": len(profile),
+        "profile": profile,
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
 
 
 def serialize_context_size_profile(baseline: RetrievalSnapshot, current: RetrievalSnapshot) -> str:
