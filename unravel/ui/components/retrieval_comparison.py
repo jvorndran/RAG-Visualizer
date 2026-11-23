@@ -5,6 +5,7 @@ import streamlit as st
 from unravel.services.retrieval.comparison import (
     RetrievalSnapshot,
     compare_retrieval,
+    context_budget,
     context_size_profile,
     rank_overlap_profile,
 )
@@ -61,6 +62,34 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
         added = sum(row["Change"] == "Added" for row in rows)
         removed = sum(row["Change"] == "Removed" for row in rows)
         st.caption(f"{retained} retained · {added} added · {removed} removed")
+        if st.checkbox(
+            "Show context budget comparison",
+            key="retrieval_comparison_budget",
+            help="Simulate a whole-chunk rank prefix within a raw character budget.",
+        ):
+            budget = st.number_input(
+                "Character budget", min_value=0, value=1000, step=1,
+                key="retrieval_comparison_budget_chars",
+            )
+            st.caption(
+                "Includes whole chunks in retrieval order, stopping at the first chunk "
+                "that would exceed the budget. Zero permits only leading empty chunks. "
+                "Counts raw Unicode characters, including whitespace; excludes separators "
+                "and prompt instructions. This is not a token limit. Both complete runs "
+                "are used regardless of comparison filters. Retrieval and answers stay unchanged."
+            )
+            budget_rows = []
+            for label, run in (("Baseline", baseline), ("Current", current)):
+                result = context_budget(run, budget)
+                budget_rows.append({
+                    "Run": label,
+                    "Included chunks": result["included_chunks"],
+                    "Excluded chunks": result["excluded_chunks"],
+                    "Used characters": result["used_characters"],
+                    "Remaining characters": result["remaining_characters"],
+                    "Next chunk characters": result["next_chunk_characters"],
+                })
+            st.dataframe(budget_rows, hide_index=True, use_container_width=True)
         if st.checkbox(
             "Show context size profile",
             key="retrieval_comparison_context_size",
