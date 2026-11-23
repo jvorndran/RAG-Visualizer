@@ -163,3 +163,25 @@ def compare_retrieval(
             }
         )
     return rows
+
+
+def context_budget(snapshot: RetrievalSnapshot, characters: int) -> dict[str, int | None]:
+    """Fit a rank prefix of whole chunks without skipping or truncating text."""
+    if type(characters) is not int or characters < 0:
+        raise ValueError("Character budget must be a non-negative integer.")
+    used = included = 0
+    next_size = None
+    for chunk in snapshot.chunks:
+        size = len(chunk.text)
+        if used + size > characters:
+            next_size = size
+            break
+        used += size
+        included += 1
+    return {
+        "included_chunks": included,
+        "excluded_chunks": len(snapshot.chunks) - included,
+        "used_characters": used,
+        "remaining_characters": characters - used,
+        "next_chunk_characters": next_size,
+    }
