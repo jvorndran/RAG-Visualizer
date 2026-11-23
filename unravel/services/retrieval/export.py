@@ -9,6 +9,7 @@ from unravel.services.retrieval.comparison import (
     RankedChunk,
     RetrievalSnapshot,
     compare_retrieval,
+    context_budget,
     context_size_profile,
     rank_overlap_profile,
 )
@@ -140,3 +141,21 @@ def _json_safe(value: object) -> object:
     if isinstance(value, (tuple, list)):
         return [_json_safe(item) for item in value]
     return value
+
+
+def serialize_context_budget(
+    baseline: RetrievalSnapshot, current: RetrievalSnapshot, characters: int
+) -> str:
+    """Export complete-run budget measurements without raw context or scores."""
+    payload = {
+        "schema_version": 1,
+        "scope": "full_context_budget",
+        "measurement": "raw_unicode_characters",
+        "selection": "whole_chunk_rank_prefix",
+        "character_budget": characters,
+        "baseline": {"query": baseline.query, "strategy": baseline.strategy,
+                     **context_budget(baseline, characters)},
+        "current": {"query": current.query, "strategy": current.strategy,
+                    **context_budget(current, characters)},
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n"

@@ -10,6 +10,7 @@ from unravel.services.retrieval.comparison import (
     rank_overlap_profile,
 )
 from unravel.services.retrieval.export import (
+    serialize_context_budget,
     serialize_context_size_profile,
     serialize_rank_overlap_profile,
     serialize_visible_comparison,
@@ -90,6 +91,15 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
                     "Next chunk characters": result["next_chunk_characters"],
                 })
             st.dataframe(budget_rows, hide_index=True, use_container_width=True)
+            st.download_button(
+                label="Download context budget as JSON",
+                data=serialize_context_budget(baseline, current, budget),
+                file_name="retrieval-context-budget.json",
+                mime="application/json",
+                key="retrieval_comparison_budget_download",
+                help="Complete-run budget measurements with both query labels and strategies. "
+                "Excludes chunk text and scores; independent of comparison filters.",
+            )
         if st.checkbox(
             "Show context size profile",
             key="retrieval_comparison_context_size",

@@ -40,3 +40,39 @@ def test_budget_compares_complete_runs_and_follows_clear_and_repin():
     app.run().button(key="retrieval_comparison_pin").click().run()
     assert not app.checkbox(key="retrieval_comparison_budget").value
     assert not app.exception
+
+
+def test_budget_download_uses_active_budget_and_complete_runs():
+    import json
+    from unittest.mock import patch
+
+    with patch("streamlit.download_button") as download:
+        app = AppTest.from_string(APP, default_timeout=30).run()
+        app.button(key="retrieval_comparison_pin").click().run()
+        app.checkbox(key="retrieval_comparison_budget").check().run()
+        app.number_input(key="retrieval_comparison_budget_chars").set_value(3).run()
+        download.reset_mock()
+        app.text_input(key="retrieval_comparison_search").input("nothing matches").run()
+        calls = [call.kwargs for call in download.call_args_list
+                 if call.kwargs["key"] == "retrieval_comparison_budget_download"]
+        assert len(calls) == 1
+        payload = json.loads(calls[0]["data"])
+        assert payload["character_budget"] == 3
+        assert payload["baseline"]["included_chunks"] == 1
+        assert payload["current"]["included_chunks"] == 1
+        assert calls[0]["mime"] == "application/json"
+        app.session_state["results"] = []
+        download.reset_mock()
+        app.run()
+        data = next(call.kwargs["data"] for call in download.call_args_list
+                    if call.kwargs["key"] == "retrieval_comparison_budget_download")
+        assert json.loads(data)["current"]["included_chunks"] == 0
+        download.reset_mock()
+        app.checkbox(key="retrieval_comparison_budget").uncheck().run()
+        assert not any(call.kwargs["key"] == "retrieval_comparison_budget_download"
+                       for call in download.call_args_list)
+        app.checkbox(key="retrieval_comparison_budget").check().run()
+        download.reset_mock()
+        app.button(key="retrieval_comparison_clear").click().run()
+        assert not download.call_args_list
+        assert not app.exception
