@@ -6,6 +6,7 @@ from unravel.services.retrieval.comparison import (
     RetrievalSnapshot,
     compare_retrieval,
     context_budget,
+    context_redundancy,
     context_size_profile,
     rank_overlap_profile,
 )
@@ -63,6 +64,30 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
         added = sum(row["Change"] == "Added" for row in rows)
         removed = sum(row["Change"] == "Removed" for row in rows)
         st.caption(f"{retained} retained · {added} added · {removed} removed")
+        if st.checkbox(
+            "Show context redundancy comparison",
+            key="retrieval_comparison_redundancy",
+            help="Measure exact raw text repeated across chunk indices in both complete runs.",
+        ):
+            st.caption(
+                "Repeated chunks are copies after the first occurrence of identical full text, "
+                "regardless of chunk index or score. Counts preserve case, whitespace and Unicode "
+                "form. Repeated characters count only those excess copies. Partial overlaps and "
+                "semantic similarity are not measured. Both complete snapshots are used; "
+                "comparison filters, retrieval and generated answers stay unchanged."
+            )
+            redundancy_rows = []
+            for label, run in (("Baseline", baseline), ("Current", current)):
+                result = context_redundancy(run)
+                redundancy_rows.append({
+                    "Run": label,
+                    "Chunks": result["chunks"],
+                    "Unique texts": result["unique_texts"],
+                    "Repeated chunks": result["repeated_chunks"],
+                    "Total characters": result["total_characters"],
+                    "Repeated characters": result["repeated_characters"],
+                })
+            st.dataframe(redundancy_rows, hide_index=True, use_container_width=True)
         if st.checkbox(
             "Show context budget comparison",
             key="retrieval_comparison_budget",

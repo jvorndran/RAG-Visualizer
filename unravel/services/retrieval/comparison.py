@@ -185,3 +185,23 @@ def context_budget(snapshot: RetrievalSnapshot, characters: int) -> dict[str, in
         "remaining_characters": characters - used,
         "next_chunk_characters": next_size,
     }
+
+
+def context_redundancy(snapshot: RetrievalSnapshot) -> dict[str, int]:
+    """Count excess exact-text copies across chunk indices without changing evidence."""
+    seen = set()
+    repeated_chunks = repeated_characters = total_characters = 0
+    for chunk in snapshot.chunks:
+        total_characters += len(chunk.text)
+        if chunk.text in seen:
+            repeated_chunks += 1
+            repeated_characters += len(chunk.text)
+        else:
+            seen.add(chunk.text)
+    return {
+        "chunks": len(snapshot.chunks),
+        "unique_texts": len(seen),
+        "repeated_chunks": repeated_chunks,
+        "total_characters": total_characters,
+        "repeated_characters": repeated_characters,
+    }
