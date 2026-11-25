@@ -12,6 +12,7 @@ from unravel.services.retrieval.comparison import (
 )
 from unravel.services.retrieval.export import (
     serialize_context_budget,
+    serialize_context_redundancy,
     serialize_context_size_profile,
     serialize_rank_overlap_profile,
     serialize_visible_comparison,
@@ -88,6 +89,15 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
                     "Repeated characters": result["repeated_characters"],
                 })
             st.dataframe(redundancy_rows, hide_index=True, use_container_width=True)
+            st.download_button(
+                label="Download context redundancy as JSON",
+                data=serialize_context_redundancy(baseline, current),
+                file_name="retrieval-context-redundancy.json",
+                mime="application/json",
+                key="retrieval_comparison_redundancy_download",
+                help="Complete-run repetition measurements with query labels and strategies. "
+                "Excludes raw context and scores; independent of comparison filters.",
+            )
         if st.checkbox(
             "Show context budget comparison",
             key="retrieval_comparison_budget",
