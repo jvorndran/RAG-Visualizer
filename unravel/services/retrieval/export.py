@@ -10,6 +10,7 @@ from unravel.services.retrieval.comparison import (
     RetrievalSnapshot,
     compare_retrieval,
     context_budget,
+    context_redundancy,
     context_size_profile,
     rank_overlap_profile,
 )
@@ -157,5 +158,20 @@ def serialize_context_budget(
                      **context_budget(baseline, characters)},
         "current": {"query": current.query, "strategy": current.strategy,
                     **context_budget(current, characters)},
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+
+
+def serialize_context_redundancy(baseline: RetrievalSnapshot, current: RetrievalSnapshot) -> str:
+    """Export full-run exact-text repetition measurements without context or scores."""
+    payload = {
+        "schema_version": 1,
+        "scope": "full_context_redundancy",
+        "identity": "exact_raw_text",
+        "measurement": "raw_unicode_characters",
+        "baseline": {"query": baseline.query, "strategy": baseline.strategy,
+                     **context_redundancy(baseline)},
+        "current": {"query": current.query, "strategy": current.strategy,
+                    **context_redundancy(current)},
     }
     return json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
