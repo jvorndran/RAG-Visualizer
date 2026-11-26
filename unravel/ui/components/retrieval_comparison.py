@@ -232,6 +232,13 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             help="Search full chunk text, including removed baseline context. "
             "Filters only this inspection view; snapshots and experiment downloads stay complete.",
         ).strip().casefold()
+        exclude_text = st.text_input(
+            "Exclude comparison text",
+            key="retrieval_comparison_exclude",
+            help="Hide chunks containing this literal text, ignoring case. "
+            "Includes removed baseline context; combines with Find in comparison text. "
+            "Applies to inspection and visible downloads only.",
+        ).strip().casefold()
         order = st.radio(
             "Order comparison chunks",
             options=[
@@ -262,6 +269,7 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             if (
                 change in ("All changes", row["Change"], movement)
                 and (not search or search in chunk.text.casefold())
+                and (not exclude_text or exclude_text not in chunk.text.casefold())
                 and len(chunk.text) >= min_chars
                 and (max_chars == 0 or len(chunk.text) <= max_chars)
                 and (
@@ -309,7 +317,7 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
                 data=serialize_visible_comparison(
                     baseline.query, current.query, visible,
                     {"change": change, "top_ranks": top_ranks, "min_rank_movement": min_movement,
-                     "search": search, "order": order,
+                     "search": search, "exclude_text": exclude_text, "order": order,
                      "min_characters": min_chars, "max_characters": max_chars},
                 ),
                 file_name="retrieval-comparison.json",
@@ -340,7 +348,8 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             st.text(visible[selected][1].text)
         else:
             st.info(
-                "No comparison chunks match. Clear the search, widen the character bounds, "
+                "No comparison chunks match. Clear the search and exclusion, "
+                "widen the character bounds, "
                 "lower the minimum rank movement, increase the top-rank window "
                 "(zero shows all ranks), "
                 "or show all changes."
