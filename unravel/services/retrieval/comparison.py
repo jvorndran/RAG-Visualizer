@@ -85,6 +85,31 @@ def snapshot_retrieval(
     )
 
 
+def phrase_coverage(
+    baseline: RetrievalSnapshot, current: RetrievalSnapshot, phrases: str
+) -> list[dict[str, Any]]:
+    """Count chunks containing each distinct case-folded literal phrase."""
+    baseline_texts = [chunk.text.casefold() for chunk in baseline.chunks]
+    current_texts = [chunk.text.casefold() for chunk in current.chunks]
+    seen = set()
+    rows = []
+    for line in phrases.splitlines():
+        phrase = line.strip()
+        needle = phrase.casefold()
+        if not needle or needle in seen:
+            continue
+        seen.add(needle)
+        previous = sum(needle in text for text in baseline_texts)
+        latest = sum(needle in text for text in current_texts)
+        rows.append({
+            "Phrase": phrase,
+            "Baseline chunks": previous,
+            "Current chunks": latest,
+            "Chunk change": latest - previous,
+        })
+    return rows
+
+
 def context_size_profile(
     baseline: RetrievalSnapshot, current: RetrievalSnapshot
 ) -> list[dict[str, int]]:

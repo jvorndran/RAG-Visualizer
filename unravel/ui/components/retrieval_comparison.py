@@ -8,6 +8,7 @@ from unravel.services.retrieval.comparison import (
     context_budget,
     context_redundancy,
     context_size_profile,
+    phrase_coverage,
     rank_overlap_profile,
 )
 from unravel.services.retrieval.export import (
@@ -60,6 +61,28 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             f"minimum score {current.threshold}, "
             f"reranker {current.reranker or 'off'}."
         )
+        if st.checkbox(
+            "Show phrase coverage comparison",
+            key="retrieval_comparison_phrases",
+            help="Count chunks containing each phrase across both complete retrieval runs.",
+        ):
+            phrases = st.text_area(
+                "Phrases to compare (one per line)",
+                key="retrieval_comparison_phrase_text",
+                max_chars=4000,
+                help="Literal substrings, ignoring case. Blank lines and duplicate phrases "
+                "are ignored; the first spelling is displayed.",
+            )
+            st.caption(
+                "Each matching chunk counts once per phrase, even if the phrase repeats. "
+                "Matches stay within a chunk and preserve punctuation and Unicode form. "
+                "Chunk change is current minus baseline. Both complete snapshots are used, "
+                "independent of the visible filters. This measures literal text presence, "
+                "not semantic coverage or answer quality."
+            )
+            coverage = phrase_coverage(baseline, current, phrases)
+            if coverage:
+                st.dataframe(coverage, hide_index=True, use_container_width=True)
         rows = compare_retrieval(baseline, current)
         retained = sum(row["Change"] == "Retained" for row in rows)
         added = sum(row["Change"] == "Added" for row in rows)
