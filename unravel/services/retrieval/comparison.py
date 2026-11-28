@@ -88,9 +88,9 @@ def snapshot_retrieval(
 def phrase_coverage(
     baseline: RetrievalSnapshot, current: RetrievalSnapshot, phrases: str
 ) -> list[dict[str, Any]]:
-    """Count chunks containing each distinct case-folded literal phrase."""
-    baseline_texts = [chunk.text.casefold() for chunk in baseline.chunks]
-    current_texts = [chunk.text.casefold() for chunk in current.chunks]
+    """Count matching chunks and compare each phrase's first retrieval rank."""
+    baseline_texts = [(chunk.rank, chunk.text.casefold()) for chunk in baseline.chunks]
+    current_texts = [(chunk.rank, chunk.text.casefold()) for chunk in current.chunks]
     seen = set()
     rows = []
     for line in phrases.splitlines():
@@ -99,13 +99,21 @@ def phrase_coverage(
         if not needle or needle in seen:
             continue
         seen.add(needle)
-        previous = sum(needle in text for text in baseline_texts)
-        latest = sum(needle in text for text in current_texts)
+        previous = [rank for rank, text in baseline_texts if needle in text]
+        latest = [rank for rank, text in current_texts if needle in text]
+        previous_rank = previous[0] if previous else None
+        current_rank = latest[0] if latest else None
         rows.append({
             "Phrase": phrase,
-            "Baseline chunks": previous,
-            "Current chunks": latest,
-            "Chunk change": latest - previous,
+            "Baseline chunks": len(previous),
+            "Current chunks": len(latest),
+            "Chunk change": len(latest) - len(previous),
+            "Baseline first rank": previous_rank,
+            "Current first rank": current_rank,
+            "First rank change": (
+                previous_rank - current_rank
+                if previous_rank is not None and current_rank is not None else None
+            ),
         })
     return rows
 
