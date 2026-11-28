@@ -64,7 +64,7 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
         if st.checkbox(
             "Show phrase coverage comparison",
             key="retrieval_comparison_phrases",
-            help="Count chunks containing each phrase across both complete retrieval runs.",
+            help="Compare matching chunk counts and first-match ranks across both complete runs.",
         ):
             phrases = st.text_area(
                 "Phrases to compare (one per line)",
@@ -76,13 +76,24 @@ def render_retrieval_comparison(current: RetrievalSnapshot) -> None:
             st.caption(
                 "Each matching chunk counts once per phrase, even if the phrase repeats. "
                 "Matches stay within a chunk and preserve punctuation and Unicode form. "
-                "Chunk change is current minus baseline. Both complete snapshots are used, "
+                "Chunk change is current minus baseline. First ranks are one-based retrieval "
+                "positions; a missing match has no rank. Positive first rank changes mean "
+                "the phrase appears earlier (baseline minus current); change is unavailable "
+                "unless both runs match. Both complete snapshots are used, "
                 "independent of the visible filters. This measures literal text presence, "
                 "not semantic coverage or answer quality."
             )
             coverage = phrase_coverage(baseline, current, phrases)
             if coverage:
-                st.dataframe(coverage, hide_index=True, use_container_width=True)
+                st.dataframe(
+                    coverage, hide_index=True, use_container_width=True,
+                    column_config={
+                        column: st.column_config.NumberColumn(format="%d")
+                        for column in (
+                            "Baseline first rank", "Current first rank", "First rank change"
+                        )
+                    },
+                )
         rows = compare_retrieval(baseline, current)
         retained = sum(row["Change"] == "Retained" for row in rows)
         added = sum(row["Change"] == "Added" for row in rows)
